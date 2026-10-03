@@ -417,12 +417,6 @@ class SimpleOrderManagerApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
-        cardTheme: CardThemeData(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
       ),
       home: const MainDashboardScreen(),
     );
