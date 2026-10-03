@@ -37,7 +37,9 @@ jobs:
         run: flutter test
 
       - name: Build Android ARM64 Release APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: |
+          flutter build apk --release --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-arm64-release.apk
 
       - name: Build Universal Release APK
         run: flutter build apk --release
@@ -63,8 +65,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || 'v1.0.0' }}
-          name: Release ${{ github.ref_name || 'v1.0.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          name: Simple Order Manager Release v1.0.0
           draft: false
           prerelease: false
           generate_release_notes: true
