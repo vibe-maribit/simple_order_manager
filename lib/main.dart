@@ -417,7 +417,7 @@ class SimpleOrderManagerApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 1,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -668,7 +668,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     hintText: 'Cerca ordine o cliente...',
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceVariant
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
                         .withOpacity(0.5),
                     contentPadding: EdgeInsets.zero,
                     border: OutlineInputBorder(
@@ -1726,7 +1726,7 @@ class _ClientsTabState extends State<ClientsTab> {
                 hintText: 'Cerca cliente per nome, telefono, email...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceVariant
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
                     .withOpacity(0.5),
                 contentPadding: EdgeInsets.zero,
                 border: OutlineInputBorder(
@@ -2052,7 +2052,7 @@ class _CatalogTabState extends State<CatalogTab> {
                 hintText: 'Cerca prodotto o servizio...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceVariant
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
                     .withOpacity(0.5),
                 contentPadding: EdgeInsets.zero,
                 border: OutlineInputBorder(
