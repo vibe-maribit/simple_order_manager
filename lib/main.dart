@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:simple_order_manager/version.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const SimpleOrderManagerApp());
@@ -663,7 +665,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
                     fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withOpacity(0.5),
+                        .withValues(alpha: 0.5),
                     contentPadding: EdgeInsets.zero,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -710,13 +712,20 @@ class _OrdersTabState extends State<OrdersTab> {
             ],
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Info & Versione',
+            onPressed: () => showAppInfoDialog(context),
+          ),
+        ],
       ),
       body: Column(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Theme.of(context).colorScheme.primaryContainer
-                .withOpacity(0.3),
+                .withValues(alpha: 0.3),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -787,13 +796,13 @@ class _OrdersTabState extends State<OrdersTab> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: order.status.color.withOpacity(
-                                          0.15,
+                                        color: order.status.color.withValues(
+                                          alpha: 0.15,
                                         ),
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: order.status.color.withOpacity(
-                                            0.5,
+                                          color: order.status.color.withValues(
+                                            alpha: 0.5,
                                           ),
                                         ),
                                       ),
@@ -1557,7 +1566,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           // Totals card
           Card(
             color: Theme.of(context).colorScheme.primaryContainer
-                .withOpacity(0.5),
+                .withValues(alpha: 0.5),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -1721,7 +1730,7 @@ class _ClientsTabState extends State<ClientsTab> {
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withOpacity(0.5),
+                    .withValues(alpha: 0.5),
                 contentPadding: EdgeInsets.zero,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -1732,6 +1741,13 @@ class _ClientsTabState extends State<ClientsTab> {
             ),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Info & Versione',
+            onPressed: () => showAppInfoDialog(context),
+          ),
+        ],
       ),
       body: filtered.isEmpty
           ? Center(
@@ -2047,7 +2063,7 @@ class _CatalogTabState extends State<CatalogTab> {
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withOpacity(0.5),
+                    .withValues(alpha: 0.5),
                 contentPadding: EdgeInsets.zero,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -2058,6 +2074,13 @@ class _CatalogTabState extends State<CatalogTab> {
             ),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Info & Versione',
+            onPressed: () => showAppInfoDialog(context),
+          ),
+        ],
       ),
       body: filtered.isEmpty
           ? Center(
