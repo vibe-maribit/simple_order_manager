@@ -33,16 +33,43 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Read version from pubspec
+        id: ver
+        run: |
+          VERSION_LINE=$(grep -E '^version:' pubspec.yaml | head -n 1)
+          if [ -z "$VERSION_LINE" ]; then
+            echo "::error::Campo 'version:' non trovato in pubspec.yaml"
+            exit 1
+          fi
+          VERSION=$(echo "$VERSION_LINE" | sed -E 's/^version:[[:space:]]*//' | cut -d'+' -f1 | tr -d '"'"'"' \r')
+          BUILD=$(echo "$VERSION_LINE" | sed -E 's/^.*\+//' | tr -d '"'"'"' \r')
+          TAG="v$VERSION"
+          echo "Versione letta da pubspec.yaml: $VERSION (build $BUILD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "### App version (da pubspec.yaml)"
+            echo "- Versione: \`$VERSION\`"
+            echo "- Build: \`$BUILD\`"
+            echo "- Tag: \`$TAG\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Tests
         run: flutter test
 
       - name: Build Android ARM64 Release APK
         run: |
-          flutter build apk --release --target-platform android-arm64
+          flutter build apk --release --target-platform android-arm64 \
+            --dart-define=APP_VERSION=${{ steps.ver.outputs.version }} \
+            --dart-define=APP_BUILD_NUMBER=${{ steps.ver.outputs.build }}
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-arm64-release.apk
 
       - name: Build Universal Release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=APP_VERSION=${{ steps.ver.outputs.version }} \
+            --dart-define=APP_BUILD_NUMBER=${{ steps.ver.outputs.build }}
 
       - name: List Generated APK Files
         run: ls -la build/app/outputs/flutter-apk/
@@ -50,14 +77,14 @@ jobs:
       - name: Upload ARM64 Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-arm64-release
+          name: app-arm64-release-${{ steps.ver.outputs.version }}
           path: build/app/outputs/flutter-apk/app-arm64-release.apk
           if-no-files-found: error
 
       - name: Upload Universal Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: app-release-${{ steps.ver.outputs.version }}
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
@@ -65,8 +92,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
-          name: Simple Order Manager Release v1.0.0
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.ver.outputs.tag }}
+          name: Simple Order Manager Release v${{ steps.ver.outputs.version }}
+          body: |
+            Versione **${{ steps.ver.outputs.version }}** (build number `${{ steps.ver.outputs.build }}`),
+            dichiarata in `pubspec.yaml`.
+
+            - APK universale: `app-release.apk`
+            - APK ARM64: `app-arm64-release.apk`
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -75,3 +108,4 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
