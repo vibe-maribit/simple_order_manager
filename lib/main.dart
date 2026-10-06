@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:simple_order_manager/theme/app_theme.dart';
 import 'package:simple_order_manager/version.dart';
 
 void main() async {
@@ -32,22 +34,22 @@ class Client {
   });
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'phone': phone,
-    'email': email,
-    'address': address,
-    'notes': notes,
-  };
+        'id': id,
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'address': address,
+        'notes': notes,
+      };
 
   factory Client.fromJson(Map<String, dynamic> json) => Client(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    phone: json['phone'] as String? ?? '',
-    email: json['email'] as String? ?? '',
-    address: json['address'] as String? ?? '',
-    notes: json['notes'] as String? ?? '',
-  );
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        phone: json['phone'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+        notes: json['notes'] as String? ?? '',
+      );
 
   Client copyWith({
     String? id,
@@ -84,20 +86,20 @@ class CatalogItem {
   });
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'description': description,
-    'unitPrice': unitPrice,
-    'taxRate': taxRate,
-  };
+        'id': id,
+        'name': name,
+        'description': description,
+        'unitPrice': unitPrice,
+        'taxRate': taxRate,
+      };
 
   factory CatalogItem.fromJson(Map<String, dynamic> json) => CatalogItem(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    description: json['description'] as String? ?? '',
-    unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
-    taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
-  );
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
+        taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
+      );
 
   CatalogItem copyWith({
     String? id,
@@ -140,41 +142,114 @@ class OrderItem {
   double get total => subtotal + taxAmount;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'catalogItemId': catalogItemId,
-    'name': name,
-    'description': description,
-    'unitPrice': unitPrice,
-    'taxRate': taxRate,
-    'quantity': quantity,
-  };
+        'id': id,
+        'catalogItemId': catalogItemId,
+        'name': name,
+        'description': description,
+        'unitPrice': unitPrice,
+        'taxRate': taxRate,
+        'quantity': quantity,
+      };
 
   factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
-    id: json['id'] as String? ?? '',
-    catalogItemId: json['catalogItemId'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    description: json['description'] as String? ?? '',
-    unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
-    taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
-    quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
-  );
+        id: json['id'] as String? ?? '',
+        catalogItemId: json['catalogItemId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
+        taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
+        quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
+      );
 }
 
+/// Stati del flusso di un documento (preventivo/ordine).
+///
+/// I colori sono derivati dai token di [AppColors] invece che dai `Colors.*`
+/// della libreria Material, così le pill di stato restano coerenti con il
+/// design system anche in light mode.
 enum OrderStatus {
-  bozza('Bozza', Colors.grey),
-  inAttesa('In attesa', Colors.orange),
-  approvato('Approvato', Colors.blue),
-  completato('Completato', Colors.green);
+  bozza(
+    'Bozza',
+    color: AppColors.outline,
+    pillBackground: AppColors.surfaceContainerHigh,
+    pillForeground: AppColors.onSurfaceVariant,
+  ),
+  inAttesa(
+    'In attesa',
+    color: AppColors.tertiaryContainer,
+    pillBackground: AppColors.tertiaryFixed,
+    pillForeground: AppColors.onTertiaryFixedVariant,
+  ),
+  approvato(
+    'Approvato',
+    color: AppColors.secondary,
+    pillBackground: AppColors.secondaryContainer,
+    pillForeground: AppColors.onSecondaryContainer,
+  ),
+  completato(
+    'Completato',
+    color: AppColors.primary,
+    pillBackground: AppColors.primaryContainer,
+    pillForeground: AppColors.onPrimary,
+  );
 
   final String label;
-  final MaterialColor color;
-  const OrderStatus(this.label, this.color);
+
+  /// Colore d'accento dello stato (icona avatar, dot della pill).
+  final Color color;
+
+  /// Sfondo della pill di stato.
+  final Color pillBackground;
+
+  /// Testo della pill di stato.
+  final Color pillForeground;
+
+  const OrderStatus(
+    this.label, {
+    required this.color,
+    required this.pillBackground,
+    required this.pillForeground,
+  });
 
   static OrderStatus fromString(String? val) {
     for (final s in OrderStatus.values) {
       if (s.name == val || s.label == val) return s;
     }
     return OrderStatus.bozza;
+  }
+}
+
+/// Tipo di documento: preventivo (offerta) o ordine (lavoro confermato).
+///
+/// Il campo non esisteva nei dati salvati: [DocType.inferFromNumber] deduce il
+/// tipo dal prefisso di [WorkOrder.orderNumber] (`PREV-` ⇒ preventivo,
+/// `ORD-` ⇒ ordine) così i dati preesistenti non perdono informazioni e non
+/// richiedono migrazioni.
+enum DocType {
+  preventivo('Preventivo', 'PREV-'),
+  ordine('Ordine', 'ORD-');
+
+  /// Label mostrata nei chip filtro e nelle card.
+  final String label;
+
+  /// Prefisso convenzionale del numero documento.
+  final String prefix;
+
+  const DocType(this.label, this.prefix);
+
+  /// Converte la serializzazione (`docType.name`) in enum, `null` se ignota.
+  static DocType? fromString(String? val) {
+    for (final t in DocType.values) {
+      if (t.name == val || t.label == val) return t;
+    }
+    return null;
+  }
+
+  /// Deduce il tipo documento dal prefisso del numero (fallback backward
+  /// compatible sui dati salvati prima dell'introduzione di `docType`).
+  static DocType inferFromNumber(String orderNumber) {
+    final normalized = orderNumber.trim().toUpperCase();
+    return normalized.startsWith(ordine.prefix) ? ordine : preventivo;
   }
 }
 
@@ -188,6 +263,10 @@ class WorkOrder {
   final DateTime date;
   final String notes;
 
+  /// Tipo del documento: se non passato esplicitamente viene inferito dal
+  /// prefisso di [orderNumber] (vedi [DocType.inferFromNumber]).
+  final DocType docType;
+
   WorkOrder({
     required this.id,
     required this.orderNumber,
@@ -197,39 +276,74 @@ class WorkOrder {
     this.status = OrderStatus.bozza,
     required this.date,
     this.notes = '',
-  });
+    DocType? docType,
+  }) : docType = docType ?? DocType.inferFromNumber(orderNumber);
 
   double get subtotal => items.fold(0.0, (sum, i) => sum + i.subtotal);
   double get taxTotal => items.fold(0.0, (sum, i) => sum + i.taxAmount);
   double get grandTotal => subtotal + taxTotal;
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'orderNumber': orderNumber,
-    'clientId': clientId,
-    'clientName': clientName,
-    'items': items.map((i) => i.toJson()).toList(),
-    'status': status.name,
-    'date': date.toIso8601String(),
-    'notes': notes,
-  };
+  /// Etichetta sintetica del tipo documento, es. `Preventivo`.
+  String get docTypeLabel => docType.label;
 
-  factory WorkOrder.fromJson(Map<String, dynamic> json) => WorkOrder(
-    id: json['id'] as String? ?? '',
-    orderNumber: json['orderNumber'] as String? ?? '',
-    clientId: json['clientId'] as String? ?? '',
-    clientName: json['clientName'] as String? ?? '',
-    items:
-        (json['items'] as List<dynamic>?)
-            ?.map((i) => OrderItem.fromJson(i as Map<String, dynamic>))
-            .toList() ??
-        [],
-    status: OrderStatus.fromString(json['status'] as String?),
-    date: json['date'] != null
-        ? DateTime.tryParse(json['date'] as String) ?? DateTime.now()
-        : DateTime.now(),
-    notes: json['notes'] as String? ?? '',
-  );
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'orderNumber': orderNumber,
+        'clientId': clientId,
+        'clientName': clientName,
+        'items': items.map((i) => i.toJson()).toList(),
+        'status': status.name,
+        'docType': docType.name,
+        'date': date.toIso8601String(),
+        'notes': notes,
+      };
+
+  factory WorkOrder.fromJson(Map<String, dynamic> json) {
+    final orderNumber = json['orderNumber'] as String? ?? '';
+    return WorkOrder(
+      id: json['id'] as String? ?? '',
+      orderNumber: orderNumber,
+      clientId: json['clientId'] as String? ?? '',
+      clientName: json['clientName'] as String? ?? '',
+      items: (json['items'] as List<dynamic>?)
+              ?.map((i) => OrderItem.fromJson(i as Map<String, dynamic>))
+              .toList() ??
+          [],
+      status: OrderStatus.fromString(json['status'] as String?),
+      // Fallback sui dati pre-1.2.0: nessun campo `docType` ⇒ inferenza dal
+      // prefisso del numero documento, senza perdita dei dati esistenti.
+      docType: DocType.fromString(json['docType'] as String?) ??
+          DocType.inferFromNumber(orderNumber),
+      date: json['date'] != null
+          ? DateTime.tryParse(json['date'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      notes: json['notes'] as String? ?? '',
+    );
+  }
+
+  WorkOrder copyWith({
+    String? id,
+    String? orderNumber,
+    String? clientId,
+    String? clientName,
+    List<OrderItem>? items,
+    OrderStatus? status,
+    DateTime? date,
+    String? notes,
+    DocType? docType,
+  }) {
+    return WorkOrder(
+      id: id ?? this.id,
+      orderNumber: orderNumber ?? this.orderNumber,
+      clientId: clientId ?? this.clientId,
+      clientName: clientName ?? this.clientName,
+      items: items ?? this.items,
+      status: status ?? this.status,
+      date: date ?? this.date,
+      notes: notes ?? this.notes,
+      docType: docType ?? this.docType,
+    );
+  }
 }
 
 // ==========================================
@@ -374,6 +488,7 @@ class StorageService {
           ),
         ],
         status: OrderStatus.inAttesa,
+        docType: DocType.preventivo,
         date: DateTime.now().subtract(const Duration(days: 2)),
         notes: 'Intervento programmato per la prossima settimana.',
       ),
@@ -393,8 +508,37 @@ class StorageService {
           ),
         ],
         status: OrderStatus.approvato,
+        docType: DocType.preventivo,
         date: DateTime.now().subtract(const Duration(days: 1)),
         notes: 'Richiesta urgenza ricambio.',
+      ),
+      WorkOrder(
+        id: 'o3',
+        orderNumber: 'ORD-2026-042',
+        clientId: 'c2',
+        clientName: 'Studio Tecnico Bianchi',
+        items: [
+          OrderItem(
+            id: 'oi4',
+            catalogItemId: 'p2',
+            name: 'Sostituzione Scheda di Controllo',
+            unitPrice: 180.0,
+            taxRate: 22.0,
+            quantity: 3.0,
+          ),
+          OrderItem(
+            id: 'oi5',
+            catalogItemId: 'p1',
+            name: 'Consulenza Tecnica Specialistica',
+            unitPrice: 65.0,
+            taxRate: 22.0,
+            quantity: 4.0,
+          ),
+        ],
+        status: OrderStatus.completato,
+        docType: DocType.ordine,
+        date: DateTime.now().subtract(const Duration(days: 5)),
+        notes: 'Ordine confermato, fatturato a fine mese.',
       ),
     ];
   }
@@ -412,14 +556,7 @@ class SimpleOrderManagerApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Simple Order Manager',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E56A0),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
-      ),
+      theme: AppTheme.light,
       home: const MainDashboardScreen(),
     );
   }
@@ -583,7 +720,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           NavigationDestination(
             icon: Icon(Icons.description_outlined),
             selectedIcon: Icon(Icons.description),
-            label: 'Preventivi/Ordini',
+            label: 'Documenti',
           ),
           NavigationDestination(
             icon: Icon(Icons.people_outline),
@@ -627,280 +764,1392 @@ class OrdersTab extends StatefulWidget {
   State<OrdersTab> createState() => _OrdersTabState();
 }
 
-class _OrdersTabState extends State<OrdersTab> {
-  String _searchQuery = '';
-  OrderStatus? _selectedStatusFilter;
+/// Filtri segmentati della schermata Documenti.
+enum _DocumentFilter {
+  tutti('Tutti'),
+  preventivi('Preventivi'),
+  ordini('Ordini'),
+  bozze('Bozze');
+
+  final String label;
+
+  const _DocumentFilter(this.label);
+
+  bool matches(WorkOrder order) => switch (this) {
+        _DocumentFilter.tutti => true,
+        _DocumentFilter.preventivi => order.docType == DocType.preventivo,
+        _DocumentFilter.ordini => order.docType == DocType.ordine,
+        _DocumentFilter.bozze => order.status == OrderStatus.bozza,
+      };
+}
+
+/// Mesi in italiano per la data sulle card e per l'header "Riepilogo".
+const List<String> _kMonthsIt = <String>[
+  'Gennaio',
+  'Febbraio',
+  'Marzo',
+  'Aprile',
+  'Maggio',
+  'Giugno',
+  'Luglio',
+  'Agosto',
+  'Settembre',
+  'Ottobre',
+  'Novembre',
+  'Dicembre',
+];
+
+/// Frazione di larghezza occupata da ogni KPI card nel carousel orizzontale.
+const double kKpiCardExtentFactor = 0.78;
+
+/// Altezza fissa del carousel KPI (contenuto a 3 righe).
+const double kKpiCardHeight = 132;
+
+/// Rende il carousel KPI "snappato": a ogni scroll il vicino più vicino
+/// viene allineato al viewport (come una PageView).
+class _SnapScrollBehavior extends ScrollBehavior {
+  const _SnapScrollBehavior();
 
   @override
-  Widget build(BuildContext context) {
-    final filtered = widget.orders.where((o) {
-      final matchesSearch =
-          o.orderNumber.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          o.clientName.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesStatus =
-          _selectedStatusFilter == null || o.status == _selectedStatusFilter;
-      return matchesSearch && matchesStatus;
-    }).toList();
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const PageScrollPhysics();
+}
 
-    final totalVolume = filtered.fold(0.0, (sum, o) => sum + o.grandTotal);
+/// Numero formattato in stile italiano con separatori delle migliaia e
+/// virgola decimale, es. `1.234,56`.
+String formatEuroNumber(double value) {
+  final negative = value < 0;
+  final fixed = value.abs().toStringAsFixed(2);
+  final parts = fixed.split('.');
+  final integer = parts.first;
+  final decimals = parts.length > 1 ? parts[1] : '00';
+  final grouped = integer.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => '.',
+  );
+  return '${negative ? '-' : ''}$grouped,$decimals';
+}
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Preventivi & Lavori',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(110),
+/// Importo formattato con separatori italiani e simbolo euro (`€ 1.234,56`).
+///
+/// Formattazione minima implementata a mano per non introdurre `intl`.
+String formatEuro(double value) => value < 0
+    ? '-€ ${formatEuroNumber(value.abs())}'
+    : '€ ${formatEuroNumber(value)}';
+
+/// Data in formato italiano abbreviato, es. `06 ott 2026`.
+String formatItalianDate(DateTime date) {
+  final month = _kMonthsIt[date.month - 1].toLowerCase();
+  final short = month.length > 4 ? month.substring(0, 3) : month;
+  final day = date.day.toString().padLeft(2, '0');
+  return '$day $short ${date.year}';
+}
+
+class _OrdersTabState extends State<OrdersTab> {
+  static const Key kClearSearchKey = Key('documents-clear-search');
+  static const Key kSearchFieldKey = Key('documents-search-field');
+  static const Key kSyncRefreshKey = Key('documents-sync-refresh');
+  static const Key kBannerCtaKey = Key('documents-banner-cta');
+  static const Key kBannerKey = Key('documents-banner');
+  static const Key kKpiCarouselKey = Key('documents-kpi-carousel');
+
+  /// Prefissi delle azioni secondarie per chiave di test.
+  static String secondaryActionKey(String orderId) =>
+      'documents-secondary-action-$orderId';
+  static String primaryActionKey(String orderId) =>
+      'documents-primary-action-$orderId';
+
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ScrollController _kpiController = ScrollController();
+
+  String _searchQuery = '';
+  _DocumentFilter _filter = _DocumentFilter.tutti;
+  DateTime _lastSync = DateTime.now();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _kpiController.dispose();
+    super.dispose();
+  }
+
+  // ==========================================
+  // FORMATTING HELPERS
+  // ==========================================
+
+  /// Testo relativo usato nella barra di stato sync.
+  String _relativeSyncLabel() {
+    final minutes = DateTime.now().difference(_lastSync).inMinutes;
+    if (minutes < 1) return 'adesso';
+    if (minutes == 1) return '1 min fa';
+    if (minutes < 60) return '$minutes min fa';
+    final hours = (minutes / 60).floor();
+    return hours == 1 ? '1 ora fa' : '$hours ore fa';
+  }
+
+  // ==========================================
+  // KPI (derivati da _orders)
+  // ==========================================
+
+  /// Numero di documenti che soddisfano [test], insieme al volume `grandTotal`.
+  ({int count, double amount}) _aggregate(
+    bool Function(WorkOrder) test,
+  ) {
+    var count = 0;
+    var amount = 0.0;
+    for (final order in widget.orders) {
+      if (!test(order)) continue;
+      count += 1;
+      amount += order.grandTotal;
+    }
+    return (count: count, amount: amount);
+  }
+
+  /// Preventivi ancora da chiudere (tutti gli stati tranne `completato`).
+  ({int count, double amount}) get _kpiPreventiviAttivi => _aggregate(
+        (o) =>
+            o.docType == DocType.preventivo &&
+            o.status != OrderStatus.completato,
+      );
+
+  /// Ordini confermati (stati `approvato` o `completato`).
+  ({int count, double amount}) get _kpiOrdiniConfermati => _aggregate(
+        (o) =>
+            o.docType == DocType.ordine &&
+            (o.status == OrderStatus.approvato ||
+                o.status == OrderStatus.completato),
+      );
+
+  /// Importi ancora in negoziazione (stato `in attesa`).
+  ({int count, double amount}) get _kpiInAttesaFirma => _aggregate(
+        (o) => o.status == OrderStatus.inAttesa,
+      );
+
+  // ==========================================
+  // FILTERS
+  // ==========================================
+
+  /// Documenti che superano ricerca testuale + chip filtro attivo.
+  List<WorkOrder> get _filteredDocuments {
+    final query = _searchQuery.trim().toLowerCase();
+    final matches = widget.orders.where((o) {
+      final matchesQuery = query.isEmpty ||
+          o.orderNumber.toLowerCase().contains(query) ||
+          o.clientName.toLowerCase().contains(query);
+      return matchesQuery && _filter.matches(o);
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return matches;
+  }
+
+  /// Numero di documenti per filtro (mostrato tra parentesi nei chip).
+  int _countFor(_DocumentFilter filter) =>
+      widget.orders.where(filter.matches).length;
+
+  void _selectFilter(_DocumentFilter filter) {
+    setState(() => _filter = filter);
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _searchQuery = '');
+  }
+
+  void _focusSearch() => _searchFocusNode.requestFocus();
+
+  void _syncNow() {
+    setState(() => _lastSync = DateTime.now());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Dati locali sincronizzati ${_relativeSyncLabel()}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // ==========================================
+  // CARD ACTIONS
+  // ==========================================
+
+  /// Copia negli appunti un riassunto leggibile del documento (nessuna
+  /// dipendenza `share_plus`: l'app è offline-first).
+  Future<void> _copyDocumentSummary(WorkOrder order) async {
+    final items = order.items.length;
+    final summary = StringBuffer()
+      ..writeln('${order.docType.label} ${order.orderNumber}')
+      ..writeln('Cliente: ${order.clientName}')
+      ..writeln('Data: ${formatItalianDate(order.date)}')
+      ..writeln('Stato: ${order.status.label}')
+      ..writeln(
+        'Voci: $items',
+      )
+      ..write('Totale: ${formatEuro(order.grandTotal)} (IVA inc.)');
+
+    await Clipboard.setData(ClipboardData(text: summary.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('documents-copy-snackbar'),
+        content: Text('Riassunto di ${order.orderNumber} copiato'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Azione secondaria della card: copia sempre il riassunto negli appunti,
+  /// poi apre il flusso dedicato allo stato del documento.
+  Future<void> _handleSecondaryAction(WorkOrder order) async {
+    await _copyDocumentSummary(order);
+    if (!mounted) return;
+    switch (order.status) {
+      case OrderStatus.inAttesa:
+        _trackShipment(order);
+      case OrderStatus.bozza:
+        _shareOrder(order);
+      case OrderStatus.approvato:
+      case OrderStatus.completato:
+        break;
+    }
+  }
+
+  /// Etichetta + icona dell'azione secondaria in base allo stato.
+  ({String label, IconData icon}) _secondaryActionFor(WorkOrder order) =>
+      switch (order.status) {
+        OrderStatus.inAttesa => (
+            label: 'Traccia Spedizione',
+            icon: Icons.local_shipping_outlined,
+          ),
+        OrderStatus.bozza => (
+            label: 'Invia per firma',
+            icon: Icons.draw_outlined,
+          ),
+        OrderStatus.approvato || OrderStatus.completato => (
+            label: 'Condividi PDF',
+            icon: Icons.ios_share,
+          ),
+      };
+
+  /// Etichetta dell'azione primaria: la scheda dell'ordine o il dettaglio.
+  String _primaryActionLabel(WorkOrder order) =>
+      order.docType == DocType.ordine ? 'Scheda Ordine' : 'Dettagli';
+
+  /// Sheet "Invia per firma": riepilogo note + azioni sul documento in attesa.
+  void _shareOrder(WorkOrder order) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.spaceLg),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 4.0,
-                ),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Cerca ordine o cliente...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.5),
-                    contentPadding: EdgeInsets.zero,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onChanged: (val) => setState(() => _searchQuery = val),
+              Text(
+                'Invia per firma · ${order.orderNumber}',
+                style: AppTextStyles.headlineSm.copyWith(
+                  color: AppColors.onSurface,
                 ),
               ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 4.0,
+              const SizedBox(height: AppSpacing.spaceSm),
+              Text(
+                'Condividi il riepilogo con il cliente ${order.clientName} '
+                'e raccogli la firma digitale.',
+                style: AppTextStyles.bodyMd.copyWith(
+                  color: AppColors.onSurfaceVariant,
                 ),
-                child: Row(
-                  children: [
-                    FilterChip(
-                      label: const Text('Tutti'),
-                      selected: _selectedStatusFilter == null,
-                      onSelected: (_) =>
-                          setState(() => _selectedStatusFilter = null),
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
+              _buildSummaryBlock(order),
+              const SizedBox(height: AppSpacing.spaceLg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Annulla'),
                     ),
-                    const SizedBox(width: 8),
-                    ...OrderStatus.values.map(
-                      (s) => Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: FilterChip(
-                          avatar: CircleAvatar(
-                            backgroundColor: s.color,
-                            radius: 5,
-                          ),
-                          label: Text(s.label),
-                          selected: _selectedStatusFilter == s,
-                          onSelected: (sel) => setState(
-                            () => _selectedStatusFilter = sel ? s : null,
-                          ),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(width: AppSpacing.gutter),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _openOrderDetails(order);
+                      },
+                      icon: const Icon(Icons.assignment_outlined, size: 18),
+                      label: const Text('Apri scheda'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: 'Info & Versione',
-            onPressed: () => showAppInfoDialog(context),
-          ),
-        ],
       ),
-      body: Column(
+    );
+  }
+
+  /// Sheet "Traccia spedizione": stato logistico derivato dai dati locali.
+  void _trackShipment(WorkOrder order) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.spaceLg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Traccia spedizione · ${order.orderNumber}',
+                style: AppTextStyles.headlineSm.copyWith(
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceSm),
+              _buildShipmentStep(
+                'Preventivo predisposto',
+                'Documento generato e archiviato in locale',
+                done: true,
+              ),
+              _buildShipmentStep(
+                'Attesa conferma cliente',
+                'Il documento è in attesa di firma',
+                done: order.status == OrderStatus.inAttesa,
+                highlighted: true,
+              ),
+              _buildShipmentStep(
+                'Spedizione',
+                'In programma dopo la conferma',
+                done: order.status == OrderStatus.completato,
+              ),
+              const SizedBox(height: AppSpacing.spaceLg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Chiudi'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.gutter),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _openOrderDetails(order);
+                      },
+                      icon: const Icon(Icons.receipt_long, size: 18),
+                      label: const Text('Apri dettaglio'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShipmentStep(
+    String title,
+    String subtitle, {
+    required bool done,
+    bool highlighted = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.spaceSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Theme.of(context).colorScheme.primaryContainer
-                .withValues(alpha: 0.3),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: done
+                  ? AppColors.secondaryContainer
+                  : AppColors.surfaceContainerHigh,
+            ),
+            child: Icon(
+              done ? Icons.check : Icons.circle_outlined,
+              size: 12,
+              color: done ? AppColors.onSecondaryContainer : AppColors.outline,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.gutter),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${filtered.length} preventivi',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  title,
+                  style: AppTextStyles.labelLg.copyWith(
+                    color:
+                        highlighted ? AppColors.primary : AppColors.onSurface,
                   ),
                 ),
                 Text(
-                  'Totale: € ${totalVolume.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  subtitle,
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: AppColors.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.assignment_outlined,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Nessun preventivo trovato',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: filtered.length,
-                    padding: const EdgeInsets.all(12),
-                    itemBuilder: (ctx, i) {
-                      final order = filtered[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => _openOrderDetails(order),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      order.orderNumber,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: order.status.color.withValues(
-                                          alpha: 0.15,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: order.status.color.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        order.status.label,
-                                        style: TextStyle(
-                                          color: order.status.color.shade800,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.person,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        order.clientName,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '${order.date.day.toString().padLeft(2, '0')}/${order.date.month.toString().padLeft(2, '0')}/${order.date.year}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      '${order.items.length} ${order.items.length == 1 ? 'voce' : 'voci'}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Divider(height: 20),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Subtotale: € ${order.subtotal.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Totale: € ${order.grandTotal.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryBlock(WorkOrder order) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.spaceMd),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSummaryRow('Cliente', order.clientName),
+          _buildSummaryRow('Data', formatItalianDate(order.date)),
+          _buildSummaryRow('Voci', '${order.items.length}'),
+          _buildSummaryRow(
+            'Totale',
+            '${formatEuro(order.grandTotal)} (IVA inc.)',
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openOrderEditor(null),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuovo Preventivo'),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: AppTextStyles.bodySm.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              style: AppTextStyles.labelMd.copyWith(color: AppColors.onSurface),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // BUILD
+  // ==========================================
+
+  @override
+  Widget build(BuildContext context) {
+    final documents = _filteredDocuments;
+    final now = DateTime.now();
+
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSyncBar(),
+                _buildSummaryHeader(now),
+                _buildKpiCarousel(),
+                _buildQuickQuoteBanner(),
+                _buildSearchField(),
+                _buildFilterChips(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.margin,
+                    AppSpacing.spaceLg,
+                    AppSpacing.margin,
+                    AppSpacing.spaceSm,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Documenti Recenti',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.spaceSm),
+                      Text(
+                        '${documents.length} '
+                        '${documents.length == 1 ? 'documento' : 'documenti'}',
+                        style: AppTextStyles.labelMd.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (documents.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.margin,
+                0,
+                AppSpacing.margin,
+                AppSpacing.spaceXl,
+              ),
+              sliver: SliverList.separated(
+                itemCount: documents.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppSpacing.gutter),
+                itemBuilder: (_, index) => _buildDocumentCard(
+                  documents[index],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      titleSpacing: AppSpacing.margin,
+      title: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              borderRadius: BorderRadius.circular(AppRadii.xl),
+            ),
+            child: const Icon(
+              Icons.palette,
+              size: 20,
+              color: AppColors.onPrimary,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.gutter),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Colormeter',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  'Documenti',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.headlineSm.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        IconButton(
+          key: const Key('documents-appbar-search'),
+          icon: const Icon(Icons.search),
+          tooltip: 'Cerca documento',
+          onPressed: _focusSearch,
+        ),
+        IconButton(
+          key: const Key('documents-appbar-sync'),
+          icon: const Icon(Icons.sync),
+          tooltip: 'Sincronizza ora',
+          onPressed: _syncNow,
+        ),
+        const Padding(
+          padding: EdgeInsets.only(right: AppSpacing.spaceSm),
+          child: CircleAvatar(
+            key: Key('documents-appbar-avatar'),
+            radius: 14,
+            backgroundColor: AppColors.secondaryContainer,
+            child: Text(
+              'CM',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSecondaryContainer,
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.info_outline),
+          tooltip: 'Info & Versione',
+          onPressed: () => showAppInfoDialog(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSyncBar() {
+    return Container(
+      width: double.infinity,
+      color: AppColors.surfaceContainerHigh,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.margin,
+        vertical: AppSpacing.spaceSm,
+      ),
+      child: Row(
+        children: [
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.spaceSm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryContainer,
+                borderRadius: BorderRadius.circular(AppRadii.full),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.spaceXs),
+                  Flexible(
+                    child: Text(
+                      'Online · Cantiere Nord',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.labelSm.copyWith(
+                        color: AppColors.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.gutter),
+          Expanded(
+            child: Text(
+              'Sincronizzazione completata ${_relativeSyncLabel()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodySm.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          TextButton(
+            key: kSyncRefreshKey,
+            onPressed: _syncNow,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.spaceSm,
+              ),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Aggiorna',
+              style: AppTextStyles.labelMd,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryHeader(DateTime now) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.margin,
+        AppSpacing.spaceLg,
+        AppSpacing.margin,
+        AppSpacing.spaceMd,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Riepilogo ${_kMonthsIt[now.month - 1]} ${now.year}',
+                  style: AppTextStyles.headlineMd.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceXs),
+                Text(
+                  '${widget.orders.length} '
+                  '${widget.orders.length == 1 ? 'documento' : 'documenti'} in '
+                  'archivio',
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiCarousel() {
+    final attivi = _kpiPreventiviAttivi;
+    final confermati = _kpiOrdiniConfermati;
+    final attesa = _kpiInAttesaFirma;
+
+    final cards = <Widget>[
+      _buildKpiCard(
+        key: const Key('kpi-preventivi-attivi'),
+        eyebrow: 'PREVENTIVI ATTIVI',
+        value: formatEuro(attivi.amount),
+        caption: '${attivi.count} in lavorazione',
+        icon: Icons.description_outlined,
+        accent: AppColors.primary,
+      ),
+      _buildKpiCard(
+        key: const Key('kpi-ordini-confermati'),
+        eyebrow: 'ORDINI CONFERMATI',
+        value: formatEuro(confermati.amount),
+        caption: '${confermati.count} confermati',
+        icon: Icons.precision_manufacturing_outlined,
+        accent: AppColors.secondary,
+      ),
+      _buildKpiCard(
+        key: const Key('kpi-in-attesa-firma'),
+        eyebrow: 'IN ATTESA FIRMA',
+        value: formatEuro(attesa.amount),
+        caption: '${attesa.count} da negoziare',
+        icon: Icons.pending_actions_outlined,
+        accent: AppColors.tertiaryContainer,
+      ),
+    ];
+
+    final cardWidth = MediaQuery.sizeOf(context).width * kKpiCardExtentFactor;
+
+    return SizedBox(
+      height: kKpiCardHeight,
+      child: ScrollConfiguration(
+        behavior: const _SnapScrollBehavior(),
+        child: ListView.builder(
+          key: kKpiCarouselKey,
+          controller: _kpiController,
+          scrollDirection: Axis.horizontal,
+          physics: const PageScrollPhysics(),
+          itemExtent: cardWidth,
+          cacheExtent: 4000,
+          itemCount: cards.length,
+          itemBuilder: (_, index) => Padding(
+            padding: EdgeInsets.only(
+              left: index == 0 ? AppSpacing.margin : AppSpacing.gutter,
+              right: index == cards.length - 1
+                  ? AppSpacing.margin
+                  : AppSpacing.gutter,
+            ),
+            child: cards[index],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpiCard({
+    required Key key,
+    required String eyebrow,
+    required String value,
+    required String caption,
+    required IconData icon,
+    required Color accent,
+  }) {
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(AppSpacing.spaceMd),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  eyebrow,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.labelSm.copyWith(color: accent),
+                ),
+              ),
+              Icon(icon, size: 16, color: accent),
+            ],
+          ),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.currencyCard.copyWith(
+              color: AppColors.onSurface,
+            ),
+          ),
+          Text(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodySm.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickQuoteBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.margin,
+        AppSpacing.spaceMd,
+        AppSpacing.margin,
+        0,
+      ),
+      child: Container(
+        key: kBannerKey,
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.spaceMd),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadii.xl),
+          gradient: const LinearGradient(
+            colors: [AppColors.primaryContainer, AppColors.primary],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+        child: Row(
+          children: [
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nuovo Preventivo Rapido',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.headlineSm.copyWith(
+                      color: AppColors.onPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.spaceXs),
+                  Text(
+                    'Crea un preventivo dal catalogo in pochi passaggi',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySm.copyWith(
+                      color: AppColors.onPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.gutter),
+            ElevatedButton(
+              key: kBannerCtaKey,
+              onPressed: () => _openOrderEditor(null),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.onPrimary,
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.spaceMd,
+                  vertical: AppSpacing.spaceSm,
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Crea',
+                style: AppTextStyles.labelLg.copyWith(
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.margin,
+        AppSpacing.spaceMd,
+        AppSpacing.margin,
+        0,
+      ),
+      child: TextField(
+        key: kSearchFieldKey,
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        onChanged: _onSearchChanged,
+        style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
+        decoration: InputDecoration(
+          hintText: 'Cerca per numero o cliente',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 40,
+            minHeight: 40,
+          ),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  key: kClearSearchKey,
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Cancella ricerca',
+                  onPressed: _clearSearch,
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.margin,
+          AppSpacing.spaceMd,
+          AppSpacing.margin,
+          AppSpacing.spaceSm,
+        ),
+        itemCount: _DocumentFilter.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.spaceSm),
+        itemBuilder: (_, index) {
+          final filter = _DocumentFilter.values[index];
+          return _buildFilterChip(filter, _countFor(filter));
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(_DocumentFilter filter, int count) {
+    final selected = _filter == filter;
+    final foreground =
+        selected ? AppColors.onPrimary : AppColors.onSurfaceVariant;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        key: Key('filter-chip-${filter.name}'),
+        color: selected
+            ? AppColors.primaryContainer
+            : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadii.full),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadii.full),
+          onTap: () => _selectFilter(filter),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.spaceMd,
+              vertical: AppSpacing.spaceSm,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.full),
+              border: Border.all(
+                color: selected
+                    ? AppColors.primaryContainer
+                    : AppColors.outlineVariant,
+              ),
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x1F00288E),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  filter.label,
+                  style: AppTextStyles.labelLg.copyWith(color: foreground),
+                ),
+                const SizedBox(width: AppSpacing.spaceXs),
+                Text(
+                  '($count)',
+                  style: AppTextStyles.labelMd.copyWith(
+                    color: selected
+                        ? AppColors.onPrimary
+                        : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.spaceLg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.assignment_outlined,
+              size: 56,
+              color: AppColors.outline,
+            ),
+            const SizedBox(height: AppSpacing.gutter),
+            Text(
+              'Nessun documento trovato',
+              style: AppTextStyles.headlineSm.copyWith(
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.spaceXs),
+            Text(
+              'Modifica la ricerca o il filtro per vedere altri documenti.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySm.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentCard(WorkOrder order) {
+    final secondary = _secondaryActionFor(order);
+
+    return Card(
+      key: Key('document-card-${order.id}'),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+        onTap: () => _openOrderDetails(order),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.spaceMd),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDocumentAvatar(order),
+                  const SizedBox(width: AppSpacing.gutter),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order.clientName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                        Text(
+                          _documentSubtitle(order),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodySm.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.spaceSm),
+                  _buildStatusPill(order),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.gutter),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.tag,
+                    size: 14,
+                    color: AppColors.outline,
+                  ),
+                  const SizedBox(width: AppSpacing.spaceXs),
+                  Flexible(
+                    child: Text(
+                      order.orderNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.labelMd.copyWith(
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.gutter),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 12,
+                    color: AppColors.outline,
+                  ),
+                  const SizedBox(width: AppSpacing.spaceXs),
+                  Flexible(
+                    child: Text(
+                      formatItalianDate(order.date),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.gutter),
+                child: Divider(height: 1, color: AppColors.outlineVariant),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            formatEuro(order.grandTotal),
+                            style: AppTextStyles.currencyCard.copyWith(
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'IVA inc.',
+                          style: AppTextStyles.labelSm.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.spaceSm),
+                  Flexible(
+                    child: Text(
+                      '${order.items.length} '
+                      '${order.items.length == 1 ? 'voce' : 'voci'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.gutter),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildCardAction(
+                      key: Key(secondaryActionKey(order.id)),
+                      label: secondary.label,
+                      icon: secondary.icon,
+                      primary: false,
+                      onPressed: () => _handleSecondaryAction(order),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.gutter),
+                  Expanded(
+                    child: _buildCardAction(
+                      key: Key(primaryActionKey(order.id)),
+                      label: _primaryActionLabel(order),
+                      icon: order.docType == DocType.ordine
+                          ? Icons.receipt_long
+                          : Icons.visibility_outlined,
+                      primary: true,
+                      onPressed: () => _openOrderDetails(order),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _documentSubtitle(WorkOrder order) {
+    if (order.items.isEmpty) return '${order.docType.label} senza voci';
+    final first = order.items.first.name;
+    final extra = order.items.length - 1;
+    return extra > 0 ? '$first +$extra altre' : first;
+  }
+
+  Widget _buildDocumentAvatar(WorkOrder order) {
+    final icon = switch (order.docType) {
+      DocType.preventivo => switch (order.status) {
+          OrderStatus.approvato || OrderStatus.completato => Icons.check_circle,
+          OrderStatus.inAttesa => Icons.pending_actions,
+          OrderStatus.bozza => Icons.edit_note,
+        },
+      DocType.ordine => Icons.precision_manufacturing,
+    };
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: order.status.pillBackground,
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+      ),
+      child: Icon(icon, size: 20, color: order.status.pillForeground),
+    );
+  }
+
+  Widget _buildStatusPill(WorkOrder order) {
+    return Container(
+      key: Key('document-status-pill-${order.id}'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.spaceSm,
+        vertical: AppSpacing.spaceXs,
+      ),
+      decoration: BoxDecoration(
+        color: order.status.pillBackground,
+        borderRadius: BorderRadius.circular(AppRadii.full),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: order.status.color,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.spaceXs),
+          Text(
+            order.status.label,
+            style: AppTextStyles.labelMd.copyWith(
+              color: order.status.pillForeground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardAction({
+    required Key key,
+    required String label,
+    required IconData icon,
+    required bool primary,
+    required VoidCallback onPressed,
+  }) {
+    final foreground = primary ? AppColors.onPrimary : AppColors.primary;
+    final background =
+        primary ? AppColors.primary : AppColors.surfaceContainerLow;
+
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(AppRadii.xl),
+      child: InkWell(
+        key: key,
+        borderRadius: BorderRadius.circular(AppRadii.xl),
+        onTap: onPressed,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceSm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.xl),
+            border: Border.all(
+              color: primary ? AppColors.primary : AppColors.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: foreground),
+              const SizedBox(width: AppSpacing.spaceXs),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: AppTextStyles.labelMd.copyWith(
+                      color: foreground,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -928,7 +2177,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: AppColors.outlineVariant,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -984,14 +2233,14 @@ class _OrdersTabState extends State<OrdersTab> {
                 ),
                 Text(
                   'Data: ${order.date.day}/${order.date.month}/${order.date.year}',
-                  style: TextStyle(color: Colors.grey.shade600),
+                  style: const TextStyle(color: AppColors.onSurfaceVariant),
                 ),
                 if (order.notes.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
+                      color: AppColors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -1009,7 +2258,7 @@ class _OrdersTabState extends State<OrdersTab> {
                 ...order.items.map(
                   (item) => Card(
                     elevation: 0,
-                    color: Colors.grey.shade50,
+                    color: AppColors.surfaceContainerLow,
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     child: ListTile(
                       title: Text(
@@ -1089,8 +2338,8 @@ class _OrdersTabState extends State<OrdersTab> {
                     Expanded(
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade100,
-                          foregroundColor: Colors.red.shade900,
+                          backgroundColor: AppColors.errorContainer,
+                          foregroundColor: AppColors.onErrorContainer,
                         ),
                         icon: const Icon(Icons.delete),
                         label: const Text('Elimina'),
@@ -1124,12 +2373,13 @@ class _OrdersTabState extends State<OrdersTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteOrder(order.id);
             },
-            child: const Text('Elimina', style: TextStyle(color: Colors.white)),
+            child: const Text('Elimina',
+                style: TextStyle(color: AppColors.onPrimary)),
           ),
         ],
       ),
@@ -1141,7 +2391,7 @@ class _OrdersTabState extends State<OrdersTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Inserisci prima almeno un cliente nell\'anagrafica!'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.tertiaryContainer,
         ),
       );
       return;
@@ -1337,15 +2587,14 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Aggiungi almeno una voce al preventivo!'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
     }
 
     final order = WorkOrder(
-      id:
-          widget.existingOrder?.id ??
+      id: widget.existingOrder?.id ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       orderNumber: _orderNumber,
       clientId: _selectedClient.id,
@@ -1383,7 +2632,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           // Header info
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(AppSpacing.spaceMd),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1392,10 +2641,11 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                       Expanded(
                         child: Text(
                           _orderNumber,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.onSurface,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       DropdownButton<OrderStatus>(
@@ -1461,7 +2711,11 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             children: [
               const Text(
                 'Voci Preventivo',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
               ),
               Row(
                 children: [
@@ -1505,17 +2759,19 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                           children: [
                             Text(
                               item.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
+                              style: AppTextStyles.labelLg.copyWith(
+                                color: AppColors.onSurface,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              '€ ${item.unitPrice.toStringAsFixed(2)} + IVA ${item.taxRate.toStringAsFixed(0)}%',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 13,
+                              '${formatEuro(item.unitPrice)} + IVA ${item.taxRate.toStringAsFixed(0)}%',
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: AppColors.onSurfaceVariant,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -1553,7 +2809,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                       IconButton(
                         icon: const Icon(
                           Icons.delete_outline,
-                          color: Colors.red,
+                          color: AppColors.error,
                         ),
                         onPressed: () => setState(() => _items.removeAt(idx)),
                       ),
@@ -1565,10 +2821,9 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           const SizedBox(height: 20),
           // Totals card
           Card(
-            color: Theme.of(context).colorScheme.primaryContainer
-                .withValues(alpha: 0.5),
+            color: AppColors.surfaceContainerLow,
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(AppSpacing.spaceMd),
               child: Column(
                 children: [
                   Row(
@@ -1600,15 +2855,16 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                         'TOTALE COMPLESSIVO:',
                         style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
                         ),
                       ),
                       Text(
-                        '€ ${_grandTotal.toStringAsFixed(2)}',
-                        style: TextStyle(
+                        formatEuro(_grandTotal),
+                        style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -1621,8 +2877,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.all(16),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.onPrimary,
             ),
             icon: const Icon(Icons.save),
             label: const Text(
@@ -1661,7 +2917,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '€ ${cat.unitPrice.toStringAsFixed(2)} (IVA ${cat.taxRate.toStringAsFixed(0)}%) - ${cat.description}',
+              '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%) - ${cat.description}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1699,6 +2955,67 @@ class ClientsTab extends StatefulWidget {
   State<ClientsTab> createState() => _ClientsTabState();
 }
 
+/// Decorazione del campo di ricerca condiviso dalle tab Clienti / Catalogo.
+///
+/// Usa i token del design system: riempimento `surfaceContainerLowest` e
+/// raggio [AppRadii.xl].
+InputDecoration appSearchFieldDecoration(String hintText) {
+  return InputDecoration(
+    hintText: hintText,
+    prefixIcon: const Icon(Icons.search, size: 20),
+    filled: true,
+    fillColor: AppColors.surfaceContainerLowest,
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.spaceMd,
+      vertical: AppSpacing.spaceMd,
+    ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadii.xl),
+      borderSide: BorderSide.none,
+    ),
+    enabledBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
+      borderSide: BorderSide(color: AppColors.outlineVariant),
+    ),
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
+      borderSide: BorderSide(color: AppColors.primary, width: 1.6),
+    ),
+  );
+}
+
+/// Campo di ricerca condiviso dalle tab Clienti / Catalogo.
+///
+/// Aggiunge all'input l'ombra leggera prevista dal design system: colore
+/// derivato da `onSurface` all'8%, raggio [AppRadii.xl].
+class AppSearchField extends StatelessWidget {
+  const AppSearchField({super.key, required this.hintText, this.onChanged});
+
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x14131B2E),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
+        decoration: appSearchFieldDecoration(hintText),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
 class _ClientsTabState extends State<ClientsTab> {
   String _searchQuery = '';
 
@@ -1715,28 +3032,17 @@ class _ClientsTabState extends State<ClientsTab> {
       appBar: AppBar(
         title: const Text(
           'Anagrafica Clienti',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: AppTextStyles.headlineSm,
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
+              horizontal: AppSpacing.margin,
+              vertical: AppSpacing.spaceSm,
             ),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Cerca cliente per nome, telefono, email...',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.5),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+            child: AppSearchField(
+              hintText: 'Cerca cliente per nome, telefono, email...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
@@ -1750,19 +3056,22 @@ class _ClientsTabState extends State<ClientsTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? Center(
+          ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.person_off_outlined,
                     size: 64,
-                    color: Colors.grey.shade400,
+                    color: AppColors.outline,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     'Nessun cliente trovato',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -1801,10 +3110,11 @@ class _ClientsTabState extends State<ClientsTab> {
                             Expanded(
                               child: Text(
                                 client.name,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
+                                style: AppTextStyles.headlineSm.copyWith(
+                                  color: AppColors.onSurface,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             IconButton(
@@ -1815,7 +3125,7 @@ class _ClientsTabState extends State<ClientsTab> {
                               icon: const Icon(
                                 Icons.delete,
                                 size: 20,
-                                color: Colors.red,
+                                color: AppColors.error,
                               ),
                               onPressed: () => _confirmDeleteClient(client),
                             ),
@@ -1834,12 +3144,14 @@ class _ClientsTabState extends State<ClientsTab> {
                                   const Icon(
                                     Icons.phone,
                                     size: 15,
-                                    color: Colors.grey,
+                                    color: AppColors.outline,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     client.phone,
-                                    style: const TextStyle(fontSize: 14),
+                                    style: AppTextStyles.bodyMd.copyWith(
+                                      color: AppColors.onSurface,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1854,12 +3166,14 @@ class _ClientsTabState extends State<ClientsTab> {
                                   const Icon(
                                     Icons.email,
                                     size: 15,
-                                    color: Colors.grey,
+                                    color: AppColors.outline,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     client.email,
-                                    style: const TextStyle(fontSize: 14),
+                                    style: AppTextStyles.bodyMd.copyWith(
+                                      color: AppColors.onSurface,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1873,15 +3187,14 @@ class _ClientsTabState extends State<ClientsTab> {
                                 const Icon(
                                   Icons.location_on,
                                   size: 15,
-                                  color: Colors.grey,
+                                  color: AppColors.outline,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     client.address,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade700,
+                                    style: AppTextStyles.bodySm.copyWith(
+                                      color: AppColors.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
@@ -1893,10 +3206,10 @@ class _ClientsTabState extends State<ClientsTab> {
                             padding: const EdgeInsets.only(top: 6.0),
                             child: Text(
                               'Note: ${client.notes}',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 13,
                                 fontStyle: FontStyle.italic,
-                                color: Colors.grey.shade600,
+                                color: AppColors.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -1968,8 +3281,7 @@ class _ClientsTabState extends State<ClientsTab> {
               if (name.isEmpty) return;
 
               final client = Client(
-                id:
-                    existing?.id ??
+                id: existing?.id ??
                     DateTime.now().millisecondsSinceEpoch.toString(),
                 name: name,
                 phone: phoneCtrl.text.trim(),
@@ -2000,12 +3312,13 @@ class _ClientsTabState extends State<ClientsTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteClient(client.id);
             },
-            child: const Text('Elimina', style: TextStyle(color: Colors.white)),
+            child: const Text('Elimina',
+                style: TextStyle(color: AppColors.onPrimary)),
           ),
         ],
       ),
@@ -2048,28 +3361,17 @@ class _CatalogTabState extends State<CatalogTab> {
       appBar: AppBar(
         title: const Text(
           'Catalogo Articoli & Servizi',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: AppTextStyles.headlineSm,
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
+              horizontal: AppSpacing.margin,
+              vertical: AppSpacing.spaceSm,
             ),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Cerca prodotto o servizio...',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.5),
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+            child: AppSearchField(
+              hintText: 'Cerca prodotto o servizio...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
@@ -2083,19 +3385,22 @@ class _CatalogTabState extends State<CatalogTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? Center(
+          ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.inventory_2_outlined,
                     size: 64,
-                    color: Colors.grey.shade400,
+                    color: AppColors.outline,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     'Nessun articolo a listino',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -2112,22 +3417,21 @@ class _CatalogTabState extends State<CatalogTab> {
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
                     leading: CircleAvatar(
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .secondaryContainer,
+                      backgroundColor:
+                          Theme.of(context).colorScheme.secondaryContainer,
                       child: Icon(
                         Icons.label,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSecondaryContainer,
+                        color:
+                            Theme.of(context).colorScheme.onSecondaryContainer,
                       ),
                     ),
                     title: Text(
                       item.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                      style: AppTextStyles.headlineSm.copyWith(
+                        color: AppColors.onSurface,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2136,7 +3440,9 @@ class _CatalogTabState extends State<CatalogTab> {
                           const SizedBox(height: 4),
                           Text(
                             item.description,
-                            style: TextStyle(color: Colors.grey.shade700),
+                            style: const TextStyle(
+                              color: AppColors.onSurfaceVariant,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 6),
@@ -2148,24 +3454,26 @@ class _CatalogTabState extends State<CatalogTab> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(4),
+                                color: AppColors.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(
+                                  AppRadii.lg,
+                                ),
                               ),
                               child: Text(
                                 'IVA ${item.taxRate.toStringAsFixed(0)}%',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 11,
-                                  color: Colors.blue.shade800,
+                                  color: AppColors.primary,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Tot. c/IVA: € ${grossPrice.toStringAsFixed(2)}',
-                              style: TextStyle(
+                              'Tot. c/IVA: ${formatEuro(grossPrice)}',
+                              style: const TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade600,
+                                color: AppColors.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -2177,11 +3485,9 @@ class _CatalogTabState extends State<CatalogTab> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '€ ${item.unitPrice.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
+                          formatEuro(item.unitPrice),
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.primary,
                           ),
                         ),
                         Row(
@@ -2197,7 +3503,7 @@ class _CatalogTabState extends State<CatalogTab> {
                               child: const Icon(
                                 Icons.delete,
                                 size: 18,
-                                color: Colors.red,
+                                color: AppColors.error,
                               ),
                             ),
                           ],
@@ -2297,8 +3603,7 @@ class _CatalogTabState extends State<CatalogTab> {
                 if (name.isEmpty || price < 0) return;
 
                 final item = CatalogItem(
-                  id:
-                      existing?.id ??
+                  id: existing?.id ??
                       DateTime.now().millisecondsSinceEpoch.toString(),
                   name: name,
                   description: descCtrl.text.trim(),
@@ -2331,12 +3636,13 @@ class _CatalogTabState extends State<CatalogTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteItem(item.id);
             },
-            child: const Text('Elimina', style: TextStyle(color: Colors.white)),
+            child: const Text('Elimina',
+                style: TextStyle(color: AppColors.onPrimary)),
           ),
         ],
       ),

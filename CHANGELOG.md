@@ -12,6 +12,38 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.2.0] - 2026-10-06
+
+### Added
+
+- `lib/theme/app_theme.dart`: design system Material 3 condiviso (`AppColors` + `AppColors.scheme`,
+  `AppSpacing`, `AppRadii`, `AppTextStyles`, `AppTheme.light`). È l'unico punto in cui sono
+  definiti colori, spaziature, raggi e tipografia.
+- Font **Inter** (Regular/SemiBold/Bold) inclusi in `assets/fonts/` e dichiarati in
+  `pubspec.yaml`: nessun download a runtime, rendering deterministico.
+- Rinnovo grafico della tab Preventivi/Ordini, rinominata **Documenti**:
+  - barra di sync con ultimo aggiornamento e bottone di aggiornamento manuale;
+  - carosello KPI (preventivi attivi, ordini confermati, in attesa di firma);
+  - banner in gradiente con call-to-action "Nuovo Preventivo";
+  - campo di ricerca istantanea con pulsante di cancellazione;
+  - chip di filtro `Tutti` / `Preventivi` / `Ordini` / `Bozze` con contatori;
+  - card documento con cliente, numero, data italiana, totale, pill di stato e due azioni.
+- `WorkOrder.docType` (`DocType.preventivo` / `DocType.ordine`) con inferenza dal numero di
+  documento (`DocType.inferFromNumber`): nessuna migrazione dei dati esistenti.
+- Azione secondaria delle card: copia sempre il riepilogo negli appunti (con snackbar di conferma)
+  e poi apre il flusso dedicato allo stato — condivisione preventivo o tracciamento spedizione.
+- Test: `test/design_tokens_test.dart` (verifica dei token esatti), `test/documents_ui_test.dart`
+  (helper di scroll, derivazione dei KPI, filtri, ricerca, card, appunti, seed di produzione e
+  layout senza overflow a 360x640 / 320x640 con testi lunghi), estensione di
+  `test/widget_test.dart` sul nuovo layout Documenti.
+
+### Changed
+
+- Bump SemVer da `1.1.0+2` a `1.2.0+3` (nuova funzionalità ⇒ minor + build number incrementato).
+- La navigazione in basso e il titolo usano l'etichetta `Documenti`; `OrderStatus` ora espone
+  `pillBackground` / `pillForeground` derivati dai token invece di `MaterialColor`.
+- `lib/version.dart` aggiornato ai fallback `1.2.0` / `3`, coerenti con `pubspec.yaml`.
+
 ## [1.1.0] - 2026-10-05
 
 ### Added
@@ -45,20 +77,8 @@ Nessuna modifica in corso.
 - Dashboard con tab `Preventivi/Ordini`, `Clienti` e `Catalogo`.
 - Pipeline GitHub Actions per build e pubblicazione dell'APK Android di release.
 
-[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vibe-maribit/simple_order_manager/releases/tag/v1.0.0
-
-$ grep -n "showAppInfoDialog\|info_outline\|version.dart\|AppBar(" lib/main.dart
-6:import 'package:simple_order_manager/version.dart';
-648:      appBar: AppBar(
-717:            icon: const Icon(Icons.info_outline),
-719:            onPressed: () => showAppInfoDialog(context),
-1366:      appBar: AppBar(
-1715:      appBar: AppBar(
-1746:            icon: const Icon(Icons.info_outline),
-1748:            onPressed: () => showAppInfoDialog(context),
-2048:      appBar: AppBar(
-2079:            icon: const Icon(Icons.info_outline),
-2081:            onPressed: () => showAppInfoDialog(context),
 

@@ -68,7 +68,8 @@ void main() {
     });
 
     test('AppInfo.fullVersion joins version and build number', () {
-      expect(AppInfo.fullVersion, '${AppInfo.version} (${AppInfo.buildNumber})');
+      expect(
+          AppInfo.fullVersion, '${AppInfo.version} (${AppInfo.buildNumber})');
     });
   });
 
@@ -89,8 +90,7 @@ void main() {
       expect(
         AppInfo.buildNumber,
         equals(pubspec.build),
-        reason:
-            'Aggiorna i fallback in lib/version.dart (defaultValue di '
+        reason: 'Aggiorna i fallback in lib/version.dart (defaultValue di '
             'APP_BUILD_NUMBER) al build number dichiarato in pubspec.yaml '
             '(${pubspec.build})',
       );
@@ -104,20 +104,27 @@ void main() {
 
   group('Info dialog', () {
     const tabLabels = <String>[
-      'Preventivi/Ordini',
+      'Documenti',
       'Clienti',
       'Catalogo',
     ];
 
     for (final tabLabel in tabLabels) {
-      testWidgets('tab "$tabLabel" shows version 1.1.0 (2) in the info dialog', (
+      testWidgets('tab "$tabLabel" shows the app version in the info dialog', (
         WidgetTester tester,
       ) async {
         SharedPreferences.setMockInitialValues({});
         await tester.pumpWidget(const SimpleOrderManagerApp());
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text(tabLabel));
+        // La label "Documenti" compare anche come titolo AppBar: si mira
+        // alla destinazione della NavigationBar per evitare ambiguità.
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text(tabLabel),
+          ),
+        );
         await tester.pumpAndSettle();
 
         final infoButton = find.byIcon(Icons.info_outline);
