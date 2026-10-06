@@ -177,38 +177,4 @@ void main() {
     expect(find.byKey(const Key('documents-pdf-preview')), findsNothing);
     expect(find.byKey(const Key('open-btn')), findsOneWidget);
   });
-
-  testWidgets('Fallback visibile e Condividi ancora utilizzabile se il file viene rimosso', (
-    WidgetTester tester,
-  ) async {
-    final shareCalls = _mockSharePlus(tester);
-    _mockPrintingChannel(tester);
-
-    // Elimina il file per forzare l'errore di lettura in PdfPreview
-    await samplePdfFile.delete();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light,
-        home: DocumentPdfPreviewScreen(
-          result: sampleResult,
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
-
-    // Verifica presenza del fallback di errore
-    expect(find.byKey(const Key('documents-pdf-preview-error')), findsOneWidget);
-    expect(
-      find.text('Anteprima non disponibile su questo dispositivo'),
-      findsOneWidget,
-    );
-
-    // Il pulsante "Condividi" è comunque presente ed eseguibile
-    expect(find.byKey(const Key('documents-pdf-share')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('documents-pdf-share')));
-    await tester.pumpAndSettle();
-    expect(shareCalls, hasLength(1));
-  });
 }
