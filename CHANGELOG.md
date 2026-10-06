@@ -12,6 +12,46 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.3.0] - 2026-10-06
+
+### Added
+
+- `lib/documents/document_pdf.dart`: esportazione **PDF reale** dei documenti (preventivi e ordini):
+  - costruzione con `pdf` in A4 non compresso (`compress: false`), intestazione con numero documento,
+    data italiana e pill di stato, blocco cliente, tabella righe (quantità, prezzo unitario, IVA,
+    imponibile, totale) e riquadro totali con `Subtotale` / `IVA` / `Totale documento`;
+  - colori e raggi derivati dai token `AppColors` / `AppRadii`, importi formattati con
+    `formatEuro`/`formatItalianDate` (stessi valori mostrati nelle card);
+  - font Helvetica con fallback sugli asset **Inter** (glifo `€` corretto);
+  - scrittura in `<documenti app>/documents/<tipo>-<numero>-<cliente>.pdf` con
+    `path_provider` (fallback su `Directory.systemTemp` negli ambienti senza plugin) e
+    condivisione nativa del file tramite `share_plus`;
+  - `PdfExportResult` (file, nome, dimensione in byte e dimensione leggibile).
+- Tre punti di ingresso per la generazione del PDF: azione secondaria **Condividi PDF** delle card
+  (documenti `Approvato`/`Completato`), pulsante **Genera PDF e condividi** nel bottom sheet di
+  dettaglio e pulsante omonimo nello sheet **Invia per firma**; snackbar di conferma con nome file
+  e dimensione, snackbar di errore dedicato e fallback "PDF salvato" quando la condivisione non è
+  disponibile sul dispositivo.
+- `lib/models/models.dart` e `lib/utils/format.dart`: modelli di dominio (`Client`, `CatalogItem`,
+  `OrderItem`, `OrderStatus`, `DocType`, `WorkOrder`) e formattatori (`formatEuro`,
+  `formatEuroNumber`, `formatItalianDate`, `kMonthsIt`) estratti da `lib/main.dart` per evitare
+  cicli di importazione, re-esportati da `main.dart` (nessuna modifica per i test esistenti).
+- Nuove dipendenze: `pdf ^3.11.3`, `path_provider ^2.1.5`, `share_plus ^11.1.0` (la `12.x`
+  richiede Android Gradle Plugin ≥ 8.6.0, mentre il progetto usa AGP 8.3.0 + Gradle 8.5:
+  `flutter build apk --release` resta verde). Nessuna modifica ai manifest Android, perché
+  `share_plus` dichiara già il proprio `FileProvider`.
+- Test: `test/document_pdf_test.dart` (nome file, slug, dimensioni, contenuto del PDF, scrittura su
+  disco) e i test widget in `test/documents_ui_test.dart` che verificano il flusso completo
+  (generazione, file su disco con `%PDF-`/`%%EOF`, canale nativo di condivisione intercettato).
+
+### Changed
+
+- Bump SemVer da `1.2.0+3` a `1.3.0+4` (nuova funzionalità ⇒ minor + build number incrementato).
+- L'azione secondaria dei documenti `Approvato` / `Completato` non copia più il riassunto negli
+  appunti: genera il PDF e apre il foglio di condivisione del sistema. Per `Bozza` e `In attesa`
+  la copia del riassunto resta invariata.
+- `lib/version.dart` aggiornato ai fallback `1.3.0` / `4`, coerenti con `pubspec.yaml`.
+
 ## [1.2.0] - 2026-10-06
 
 ### Added
@@ -77,7 +117,8 @@ Nessuna modifica in corso.
 - Dashboard con tab `Preventivi/Ordini`, `Clienti` e `Catalogo`.
 - Pipeline GitHub Actions per build e pubblicazione dell'APK Android di release.
 
-[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vibe-maribit/simple_order_manager/releases/tag/v1.0.0

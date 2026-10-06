@@ -1,6 +1,6 @@
 # Simple Order Manager 📱
 
-**Versione corrente: `1.2.0` (build `3`)** — in-app: icona `ⓘ` ("Info & Versione") nelle tre tab.
+**Versione corrente: `1.3.0` (build `4`)** — in-app: icona `ⓘ` ("Info & Versione") nelle tre tab.
 
 Applicazione Flutter completa per la gestione offline di preventivi, schede lavoro, anagrafica clienti e catalogo prodotti/servizi (ispirata a *Invoice Simple*, senza emissione di fatture fiscali).
 
@@ -20,14 +20,18 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
   - Calcolo automatico in tempo reale di **Subtotale Imponibile**, **Totale IVA** e **Totale Complessivo**.
   - Flusso stati con badge colorati: `Bozza`, `In attesa`, `Approvato`, `Completato`.
   - Visualizzazione scheda documento riassuntiva in stile preventivo formale.
+  - **Esportazione PDF**: generazione del file reale (intestazione, cliente, tabella righe,
+    IVA e totali) e condivisione tramite il foglio di sistema nativo del dispositivo.
 - **Tab "Documenti"** (ex Preventivi/Ordini):
   - Barra di sync con ultimo aggiornamento e bottone di aggiornamento manuale.
   - Carosello KPI con preventivi attivi, ordini confermati e documenti in attesa di firma.
   - Banner in gradiente con call-to-action per generare un preventivo in un tap.
   - Ricerca istantanea e chip di filtro (`Tutti`, `Preventivi`, `Ordini`, `Bozze`) con contatori.
   - Card documento con cliente, numero, data italiana, totale, pill di stato e due azioni.
-  - Azione secondaria che copia sempre il riepilogo negli appunti e poi apre il flusso dedicato
-    (condivisione preventivo o tracciamento spedizione).
+  - Azione secondaria dedicata allo stato: `Traccia Spedizione` (riassunto negli appunti + sheet),
+    `Invia per firma` (riassunto + sheet con "Genera PDF e condividi") e `Condividi PDF`
+    (genera il PDF del documento e lo condivide).
+  - Pulsante **Genera PDF e condividi** anche nel bottom sheet di dettaglio del documento.
 - **Persistenza Offline Garantita**:
   - Salvataggio automatico locale in formato JSON tramite `shared_preferences`.
   - Nessuna dipendenza da server esterni o database cloud: funzionamento 100% offline.
@@ -111,11 +115,11 @@ Il `BUILD` (dopo il `+`) viene sempre incrementato ad ogni release pubblicata.
 
 ```bash
 # Rilascio completo
-vim pubspec.yaml                       # 1) version: 1.2.0+3
+vim pubspec.yaml                       # 1) version: 1.3.0+4
 vim lib/version.dart                   # 2) aggiorna i defaultValue di APP_VERSION / APP_BUILD_NUMBER
-vim CHANGELOG.md                       # 3) nuova sezione ## [1.2.0] - YYYY-MM-DD
+vim CHANGELOG.md                       # 3) nuova sezione ## [1.3.0] - YYYY-MM-DD
 flutter test                           # 4) verifica coerenza
-git commit -am "chore(release): v1.2.0"
-git tag -a v1.2.0 -m "Simple Order Manager v1.2.0"
+git commit -am "chore(release): v1.3.0"
+git tag -a v1.3.0 -m "Simple Order Manager v1.3.0"
 git push origin main --follow-tags
 ```
