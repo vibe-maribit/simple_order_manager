@@ -383,7 +383,7 @@ jobs:
                 \"base\": \"main\",
                 \"head\": \"$BRANCH_NAME\",
                 \"title\": \"🤖 OpenCode: $BRANCH_NAME\",
-                \"body\": \"Generata automaticamente da OpenCode (big-pickle) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nChiude #$ISSUE_NUMBER\"
+                \"body\": \"Generata automaticamente da OpenCode (big-pickle) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nCloses #$ISSUE_NUMBER\"
               }")
             PR_NUMBER=$(echo "$RESP" | jq -r '.number // empty')
             # Se la PR esiste già (branch già pushato in precedenza)
@@ -435,13 +435,24 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"commit_title\": \"🤖 OpenCode merge: ${{ steps.ctx.outputs.branch_name }} (#$PR_NUMBER)\",
-              \"commit_message\": \"Merge automatico da OpenCode dopo VERDICT: PASS.\nChiude #$ISSUE_NUMBER\",
+              \"commit_message\": \"Merge automatico da OpenCode dopo VERDICT: PASS.\nCloses #$ISSUE_NUMBER\",
               \"merge_method\": \"squash\"
             }")
 
           MERGED=$(echo "$MERGE_RESP" | jq -r '.merged // false')
           if [ "$MERGED" = "true" ]; then
             echo "✅ PR #$PR_NUMBER mergiata in main."
+
+            # Chiusura esplicita della issue per garantire che venga chiusa
+            if [ -n "$ISSUE_NUMBER" ] && [ "$ISSUE_NUMBER" != "$PR_NUMBER" ]; then
+              echo "🔒 Chiusura issue #$ISSUE_NUMBER..."
+              curl -s -X PATCH "$API/issues/$ISSUE_NUMBER" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/json" \
+                -d '{"state":"closed","state_reason":"completed"}' > /dev/null || true
+            fi
+
             echo "🚀 Avvio esplicito di build-apk.yml per compilare la release APK..."
             curl -s -X POST \
               -H "Authorization: Bearer $GH_TOKEN" \
