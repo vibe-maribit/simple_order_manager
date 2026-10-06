@@ -313,8 +313,8 @@ jobs:
             echo "Raggiunto il tetto di $MAX_ITERATIONS iterazioni senza PASS."
           fi
 
-      # ── 8. Push + PR ─────────────────────────────────────────────────────────
-      - name: Pusha modifiche e apri/aggiorna PR
+      # ── 8. Push + PR (con sincronizzazione e risoluzione conflitti con main) ───
+      - name: Sincronizza con main, pusha modifiche e apri/aggiorna PR
         id: push
         run: |
           API="$GH_API/repos/$REPO"
@@ -323,14 +323,56 @@ jobs:
           git add .
           git commit -m "OpenCode (big-pickle): $BRANCH_NAME" || echo "Niente di nuovo."
 
+          # 1. Fetch dello stato più recente di origin/main
+          echo "🔄 Fetching stato più aggiornato di origin/main..."
+          git fetch origin main
+
+          # 2. Tentativo di merge/rebase con main per incorporare eventuali modifiche concorrenti
+          HAS_CONFLICT=false
+          if ! git merge origin/main --no-edit -m "Merge branch 'main' into $BRANCH_NAME"; then
+            echo "⚠️ Conflitti di merge rilevati con origin/main!"
+            echo "Tentativo di risoluzione automatica tramite OpenCode..."
+            
+            CONFLICTING_FILES=$(git diff --name-only --diff-filter=U)
+            echo "File in conflitto: $CONFLICTING_FILES"
+
+            opencode run --agent build --auto --model "$OPENCODE_MODEL" \
+              "Ci sono conflitti di merge Git tra questo branch e il branch principale 'main'.
+            File in conflitto:
+            $CONFLICTING_FILES
+
+            Risolvi tutti i marcatori di conflitto Git (<<<<<<<, =======, >>>>>>>) nei file.
+            Mantieni sia le nuove funzionalità sviluppate sia i cambiamenti arrivati da main.
+            Assicurati che la sintassi sia valida e che non rimangano marcatori di conflitto." || true
+
+            # Verifica se i conflitti sono stati risolti
+            if git diff --check | grep -q "conflict marker"; then
+              echo "❌ Rimangono marcatori di conflitto non risolti."
+              git merge --abort || true
+              HAS_CONFLICT=true
+            else
+              git add .
+              git commit -m "OpenCode: risoluzione automatica conflitti con main" || true
+              if [ $? -eq 0 ]; then
+                echo "✅ Conflitti risolti automaticamente con successo."
+              else
+                git merge --abort || true
+                HAS_CONFLICT=true
+              fi
+            fi
+          fi
+
           if git diff --quiet origin/main..HEAD 2>/dev/null; then
             echo "Nessuna modifica rispetto a main."
             echo "pr_number=" >> "$GITHUB_OUTPUT"
+            echo "has_conflict=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # 3. Push sul branch (forzato con lease o normale)
           git push origin "$BRANCH_NAME"
 
+          # 4. Creazione o aggiornamento PR
           if [ "${{ steps.ctx.outputs.is_pr }}" = "true" ]; then
             PR_NUMBER="${{ steps.ctx.outputs.pr_number }}"
           else
@@ -355,11 +397,12 @@ jobs:
             fi
           fi
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "has_conflict=$HAS_CONFLICT" >> "$GITHUB_OUTPUT"
 
-      # ── 9. AUTO-MERGE (solo se VERDICT: PASS) ────────────────────────────────
+      # ── 9. AUTO-MERGE (solo se VERDICT: PASS e nessun conflitto pendente) ─────
       # Il merge su main attiva automaticamente build-apk.yml → APK pubblicato
-      - name: Auto-merge PR in main (solo se PASS)
-        if: steps.build_review.outputs.verdict == 'PASS'
+      - name: Auto-merge PR in main (solo se PASS e senza conflitti)
+        if: steps.build_review.outputs.verdict == 'PASS' && steps.push.outputs.has_conflict != 'true'
         run: |
           API="$GH_API/repos/$REPO"
           PR_NUMBER="${{ steps.push.outputs.pr_number }}"
@@ -380,7 +423,7 @@ jobs:
               "$API/pulls/$PR_NUMBER" | jq -r '.mergeable // "null"')
             [ "$MERGEABLE" = "true" ] && break
             if [ "$MERGEABLE" = "false" ]; then
-              echo "PR #$PR_NUMBER non mergeabile (conflitti?). Salto il merge."
+              echo "⚠️ PR #$PR_NUMBER non mergeabile automaticamente (conflitti non banali). La PR resta aperta per review manuale."
               exit 0
             fi
             echo "Stato mergeable: $MERGEABLE. Attendo 5s... ($attempt/12)"
@@ -401,7 +444,7 @@ jobs:
           if [ "$MERGED" = "true" ]; then
             echo "✅ PR #$PR_NUMBER mergiata in main → build-apk.yml si attiverà automaticamente."
           else
-            echo "❌ Merge fallito (la PR resta aperta per revisione umana)."
+            echo "⚠️ Merge automatico non riuscito: la PR #$PR_NUMBER resta aperta per risoluzione/revisione manuale."
             echo "$MERGE_RESP"
           fi
 
