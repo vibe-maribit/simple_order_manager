@@ -13,8 +13,8 @@ import 'package:flutter/material.dart';
 ///
 /// ```bash
 /// flutter build apk --release \
-///   --dart-define=APP_VERSION=1.1.0 \
-///   --dart-define=APP_BUILD_NUMBER=2
+///   --dart-define=APP_VERSION=1.2.0 \
+///   --dart-define=APP_BUILD_NUMBER=3
 /// ```
 class AppInfo {
   const AppInfo._();
@@ -25,20 +25,21 @@ class AppInfo {
   /// Versione semantica (MAJOR.MINOR.PATCH), es. `1.1.0`.
   static const String version = String.fromEnvironment(
     'APP_VERSION',
-    defaultValue: '1.1.0',
+    defaultValue: '1.2.0',
   );
 
   /// Build number (intero incrementato ad ogni release), es. `2`.
   static const String buildNumber = String.fromEnvironment(
     'APP_BUILD_NUMBER',
-    defaultValue: '2',
+    defaultValue: '3',
   );
 
   /// Versione completa pronta per la UI, es. `1.1.0 (2)`.
   static String get fullVersion => '$version ($buildNumber)';
 
   /// Licenza d'uso dichiarata dall'applicazione.
-  static const String license = 'Solo uso interno - nessuna licenza commerciale';
+  static const String license =
+      'Solo uso interno - nessuna licenza commerciale';
 }
 
 /// Mostra il dialog "Info & Versione" con i dati di versione dell'app.
@@ -111,4 +112,3 @@ Widget _buildAppInfoDialog(BuildContext context) {
     ],
   );
 }
-
