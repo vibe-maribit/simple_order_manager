@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -133,6 +135,46 @@ Finder _inCard(String orderId, Finder matcher) => find.descendant(
       of: find.byKey(Key('document-card-$orderId')),
       matching: matcher,
     );
+
+/// Intercetta il canale nativo di `share_plus` e restituisce la lista delle
+/// chiamate ricevute, così il test può verificare il file condiviso senza
+/// aprire il foglio di sistema.
+List<MethodCall> _mockSharePlus(WidgetTester tester) {
+  const channel = MethodChannel('dev.fluttercommunity.plus/share');
+  final calls = <MethodCall>[];
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (call) async {
+      calls.add(call);
+      return 'file saved';
+    },
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
+  return calls;
+}
+
+/// Lascia completare l'I/O reale su disco (esportazione PDF) e fa avanzare la
+/// UI fino a quando non ci sono più animazioni in coda.
+Future<void> _settleExport(WidgetTester tester) async {
+  for (var round = 0; round < 20; round++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 60)),
+    );
+    // Avanza anche il tempo finto: gli snackbar in coda (es. "Riassunto
+    // copiato") devono scadere prima che quello del PDF sia visibile.
+    await tester.pump(const Duration(milliseconds: 400));
+    final done = tester.any(find.textContaining('PDF generato')) ||
+        tester.any(find.textContaining('Generazione PDF non riuscita')) ||
+        tester.any(find.textContaining('condivisione non disponibile'));
+    if (done) break;
+  }
+  await tester.pumpAndSettle();
+}
 
 /// Scorre la lista documenti verso l'alto finché [matcher] è nel tree.
 Future<void> _scrollUntilVisible(
@@ -485,11 +527,11 @@ void main() {
     });
   });
 
-  group('Azioni secondarie → appunti', () {
-    testWidgets('"Condividi PDF" copia il riepilogo e conferma con snackbar', (
+  group('Azioni secondarie → PDF', () {
+    testWidgets('"Condividi PDF" genera il PDF reale e lo condivide', (
       WidgetTester tester,
     ) async {
-      _mockClipboard(tester);
+      final shareCalls = _mockSharePlus(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-ord-1');
       await tester.pumpAndSettle();
@@ -498,22 +540,95 @@ void main() {
       await tester.tap(
         find.byKey(const Key('documents-secondary-action-kpi-ord-1')),
       );
-      await tester.pumpAndSettle();
+      await _settleExport(tester);
 
-      // Lo snackbar di conferma è visibile.
-      expect(find.text('Riassunto di ORD-2026-201 copiato'), findsOneWidget);
+      // Snackbar di conferma con nome file e dimensione.
+      expect(
+        find.textContaining(
+          'PDF generato: ord-2026-201-cliente-gamma.pdf',
+        ),
+        findsOneWidget,
+      );
 
-      final stored = await Clipboard.getData(Clipboard.kTextPlain);
-      expect(stored?.text, isNotNull);
-      final text = stored!.text!;
-      expect(text, contains('ORD-2026-201'));
-      expect(text, contains('Cliente Gamma'));
-      expect(text, contains('03 ott 2026'));
-      expect(text, contains('€ 300,00'));
-      expect(text, contains('IVA inc.'));
-      expect(text, contains('Voci: 1'));
+      // La condivisione nativa riceve il file appena scritto.
+      expect(shareCalls, hasLength(1));
+      expect(shareCalls.single.method, 'share');
+      final args = shareCalls.single.arguments as Map<Object?, Object?>;
+      expect(args['mimeTypes'], contains('application/pdf'));
+      final paths = (args['paths'] as List<Object?>).cast<String>();
+      final exported = paths.single;
+      expect(exported, endsWith('ord-2026-201-cliente-gamma.pdf'));
+
+      // Il file esiste e contiene un PDF ispezionabile.
+      final file = File(exported);
+      expect(file.existsSync(), isTrue);
+      expect(file.lengthSync(), greaterThan(500));
+      final bytes = file.readAsBytesSync();
+      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      final content = String.fromCharCodes(bytes);
+      expect(content, contains('%%EOF'));
+      expect(content, contains('ORD-2026-201'));
+      expect(content, contains('Cliente'));
+      expect(content, contains('Gamma'));
+      expect(content, contains('Subtotale'));
+      expect(content, contains('Totale'));
     });
 
+    testWidgets('il dettaglio espone "Genera PDF e condividi"', (
+      WidgetTester tester,
+    ) async {
+      final shareCalls = _mockSharePlus(tester);
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-prev-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-prev-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Genera PDF e condividi'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('documents-detail-export-pdf')));
+      await _settleExport(tester);
+
+      expect(
+        find.textContaining('PDF generato: prev-2026-101-cliente-alfa.pdf'),
+        findsOneWidget,
+      );
+      expect(shareCalls, hasLength(1));
+    });
+
+    testWidgets('lo sheet "Invia per firma" espone "Genera PDF e condividi"', (
+      WidgetTester tester,
+    ) async {
+      _mockClipboard(tester);
+      final shareCalls = _mockSharePlus(tester);
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-ord-2');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-secondary-action-kpi-ord-2')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Invia per firma · ORD-2026-202'),
+          findsOneWidget);
+      expect(
+          find.byKey(const Key('documents-sign-export-pdf')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('documents-sign-export-pdf')));
+      await _settleExport(tester);
+
+      expect(
+        find.textContaining('PDF generato: ord-2026-202-cliente-delta.pdf'),
+        findsOneWidget,
+      );
+      expect(shareCalls, hasLength(1));
+    });
+  });
+
+  group('Azioni secondarie → appunti', () {
     testWidgets('"Invia per firma" copia il riepilogo e apre lo sheet', (
       WidgetTester tester,
     ) async {
