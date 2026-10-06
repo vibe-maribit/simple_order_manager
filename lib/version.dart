@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
-// ==========================================
-// APP INFO (VERSIONING)
-// ==========================================
-
-/// Informazioni di versione dell'applicazione.
+// ===================================// APP INFO (VERSIONING)
+// ============================/// Informazioni di versione dell'applicazione.
 ///
 /// `pubspec.yaml` è la fonte di verità del versioning (Semantic Versioning).
 /// I valori di fallback qui sotto devono coincidere con `version: X.Y.Z+N`
@@ -25,13 +22,13 @@ class AppInfo {
   /// Versione semantica (MAJOR.MINOR.PATCH), es. `1.1.0`.
   static const String version = String.fromEnvironment(
     'APP_VERSION',
-    defaultValue: '1.2.0',
+    defaultValue: '1.5.0',
   );
 
   /// Build number (intero incrementato ad ogni release), es. `2`.
   static const String buildNumber = String.fromEnvironment(
     'APP_BUILD_NUMBER',
-    defaultValue: '3',
+    defaultValue: '6',
   );
 
   /// Versione completa pronta per la UI, es. `1.1.0 (2)`.

@@ -12,6 +12,107 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.5.0] - 2026-10-06
+
+### Added
+
+- Nuova quarta tab **Impostazioni → Profilo / Brand** (`lib/settings/brand_settings_screen.dart`) per
+  gestire i dati del mittente usati in intestazione ai documenti:
+  - **logo** con caricamento dalla galleria (`image_picker`), anteprima, rimozione e descrizione
+    della dimensione del file;
+  - **7 campi testuali**: Nome e cognome, Ruolo/Qualifica, Telefono 1, Telefono 2, Sito web,
+    Email principale, Email secondaria, con `TextInputType` e `AutofillHints` coerenti;
+  - anteprima **live** dell'intestazione (stesso widget usato nel dettaglio documento).
+- `lib/settings/brand_logo_store.dart`: persistenza del logo su disco in
+  `<appDocuments>/brand/logo.png`, con normalizzazione deterministica in Dart puro
+  (PNG, lato massimo 1024 px, fallback JPEG sotto i 2 MB). In `SharedPreferences` viene salvato
+  **solo il path**: i byte dell'immagine non entrano mai nelle preferenze.
+- `lib/settings/brand_header.dart`: widget condiviso dell'intestazione (logo a sinistra, nome e
+  contatti allineati a destra), usato sia dall'anteprima live sia dal bottom sheet di dettaglio.
+- `lib/models/models.dart`: modello `BrandProfile` (logoPath, fullName, role, phone1, phone2,
+  website, emailPrimary, emailSecondary) con `toJson`/`fromJson`/`copyWith`, getter derivati
+  (`hasLogo`, `isEmpty`, `displayName`, `contactLines`, `pdfHeaderLines`) e costante
+  `BrandProfile.empty`.
+- `StorageService.loadBrand()` / `saveBrand()` su chiave `simple_orders_brand_v1`: chiave assente,
+  stringa vuota o JSON corrotto restituiscono il profilo vuoto senza eccezioni (nessun seed: il
+  profilo vuoto è uno stato valido).
+- Dipendenze: `image_picker: 1.1.2` (**pin esatto**, non `^1.1.2`: la serie 1.2.x richiede Dart
+  3.11 e romperebbe la build con Flutter 3.27.4 / Dart 3.6) e `image: ^4.5.4`, già presente come
+  dipendenza transitiva di `pdf_widget_wrapper` e quindi senza download aggiuntivo.
+- Test: `test/brand_test.dart` (modello, persistenza, normalizzazione/salvataggio del logo),
+  `test/brand_settings_test.dart` (pannello, anteprima live, caricamento/rimozione logo, layout a
+  360×640) e nuovi casi in `test/document_pdf_test.dart` / `test/documents_ui_test.dart`.
+
+### Changed
+
+- `lib/documents/document_pdf.dart`: intestazione del PDF **a due righe** — prima riga logo (o
+  marchio di fallback `Simple Order Manager`) a sinistra e blocco nome + contatti allineato a
+  destra, seconda riga con tipo documento, numero, data e pill di stato; il bordo inferiore
+  `AppColors.primary` 1.5 resta invariato. I byte del logo vengono letti una sola volta per
+  documento e un file non leggibile non impedisce l'esportazione.
+- `lib/documents/document_pdf.dart`: la firma del footer usa il nome del mittente salvato e ripiega
+  su `Simple Order Manager`, così header e footer non si contraddicono.
+- `lib/main.dart`: la AppBar Documenti mostra il brand dinamico (`Colormeter` resta il fallback a
+  profilo vuoto) e il bottom sheet di dettaglio apre con il blocco brand in alto; il foglio parte
+  più aperto (95%) per mostrare logo, dati e azioni senza scorrere.
+- Nessuna modifica ad `android/` né alla pipeline CI: la galleria usa il Photo Picker di Android 13+
+  (`ACTION_GET_CONTENT` sotto), quindi nessun nuovo permesso nel manifest.
+
+## [1.4.0] - 2026-10-06
+
+### Added
+
+- `lib/documents/pdf_preview_screen.dart`: schermata di **anteprima PDF reale** basata su `package:printing` (`PdfPreview`):
+  - visualizzazione a schermo del documento PDF renderizzato prima della condivisione;
+  - pulsante esplicito "Condividi" per aprire il foglio nativo con MIME `application/pdf`;
+  - pulsante "Chiudi" per tornare alla lista dei documenti;
+  - fallback esplicito (`documents-pdf-preview-error`) con condivisione mantenuta attiva se il rendering su schermo fallisce.
+- Test dedicati all'anteprima PDF in `test/pdf_preview_test.dart`.
+
+### Changed
+
+- `lib/main.dart`: il flusso di esportazione PDF apre l'anteprima a schermo dopo la generazione, invece di innescare subito la condivisione a scatola chiusa.
+- Dipendenza `printing: ^5.14.3` aggiunta in `pubspec.yaml`.
+
+## [1.3.0] - 2026-10-06
+
+### Added
+
+- `lib/documents/document_pdf.dart`: esportazione **PDF reale** dei documenti (preventivi e ordini):
+  - costruzione con `pdf` in A4 non compresso (`compress: false`), intestazione con numero documento,
+    data italiana e pill di stato, blocco cliente, tabella righe (quantità, prezzo unitario, IVA,
+    imponibile, totale) e riquadro totali con `Subtotale` / `IVA` / `Totale documento`;
+  - colori e raggi derivati dai token `AppColors` / `AppRadii`, importi formattati con
+    `formatEuro`/`formatItalianDate` (stessi valori mostrati nelle card);
+  - font Helvetica con fallback sugli asset **Inter** (glifo `€` corretto);
+  - scrittura in `<documenti app>/documents/<tipo>-<numero>-<cliente>.pdf` con
+    `path_provider` (fallback su `Directory.systemTemp` negli ambienti senza plugin) e
+    condivisione nativa del file tramite `share_plus`;
+  - `PdfExportResult` (file, nome, dimensione in byte e dimensione leggibile).
+- Tre punti di ingresso per la generazione del PDF: azione secondaria **Condividi PDF** delle card
+  (documenti `Approvato`/`Completato`), pulsante **Genera PDF e condividi** nel bottom sheet di
+  dettaglio e pulsante omonimo nello sheet **Invia per firma**; snackbar di conferma con nome file
+  e dimensione, snackbar di errore dedicato e fallback "PDF salvato" quando la condivisione non è
+  disponibile sul dispositivo.
+- `lib/models/models.dart` e `lib/utils/format.dart`: modelli di dominio (`Client`, `CatalogItem`,
+  `OrderItem`, `OrderStatus`, `DocType`, `WorkOrder`) e formattatori (`formatEuro`,
+  `formatEuroNumber`, `formatItalianDate`, `kMonthsIt`) estratti da `lib/main.dart` per evitare
+  cicli di importazione, re-esportati da `main.dart` (nessuna modifica per i test esistenti).
+- Nuove dipendenze: `pdf ^3.11.3`, `path_provider ^2.1.5`, `share_plus ^11.1.0` (la `12.x`
+  richiede Android Gradle Plugin ≥ 8.6.0, mentre il progetto usa AGP 8.3.0 + Gradle 8.5:
+  `flutter build apk --release` resta verde). Nessuna modifica ai manifest Android, perché
+  `share_plus` dichiara già il proprio `FileProvider`.
+- Test: `test/document_pdf_test.dart` (nome file, slug, dimensioni, contenuto del PDF, scrittura su
+  disco) e i test widget in `test/documents_ui_test.dart` che verificano il flusso completo
+  (generazione, file su disco con `%PDF-`/`%%EOF`, canale nativo di condivisione intercettato).
+
+### Changed
+
+- Bump SemVer da `1.2.0+3` a `1.3.0+4` (nuova funzionalità ⇒ minor + build number incrementato).
+- L'azione secondaria dei documenti `Approvato` / `Completato` non copia più il riassunto negli
+  appunti: genera il PDF e apre il foglio di condivisione del sistema. Per `Bozza` e `In attesa`
+  la copia del riassunto resta invariata.
+- `lib/version.dart` aggiornato ai fallback `1.3.0` / `4`, coerenti con `pubspec.yaml`.
 ## [1.2.0] - 2026-10-06
 
 ### Added
@@ -77,7 +178,10 @@ Nessuna modifica in corso.
 - Dashboard con tab `Preventivi/Ordini`, `Clienti` e `Catalogo`.
 - Pipeline GitHub Actions per build e pubblicazione dell'APK Android di release.
 
-[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/vibe-maribit/simple_order_manager/releases/tag/v1.0.0

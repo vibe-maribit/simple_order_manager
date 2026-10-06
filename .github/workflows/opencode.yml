@@ -17,6 +17,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 
 jobs:
   opencode-github:
@@ -28,7 +29,7 @@ jobs:
         github.event.comment.user.login != 'github-actions[bot]' &&
         (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')))
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
 
     env:
       GH_API: "https://api.github.com"
@@ -45,8 +46,18 @@ jobs:
       ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_BODY: ${{ github.event.issue.body }}
       RUN_NUMBER: ${{ github.run_number }}
-      # OpenCode: nessun API key necessario per i modelli gratuiti Zen
-      OPENCODE_MODEL: opencode/big-pickle
+      # Chiavi API per provider a pagamento (se configurate nei Secrets, altrimenti fallback gratuito)
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Modello configurabile:
+      # 1. Flag per-run nel commento/issue (es. '--model space-bunny-free' o '--model opencode/big-pickle')
+      # 2. Modello visual se l'issue contiene immagini (default space-bunny-free, configurabile via vars.OPENCODE_VISUAL_MODEL)
+      # 3. Variabile di repository/progetto vars.OPENCODE_DEFAULT_MODEL
+      # 4. Fallback definitivo: opencode/big-pickle
+      DEFAULT_MODEL: ${{ vars.OPENCODE_DEFAULT_MODEL || 'opencode/big-pickle' }}
+      VISUAL_MODEL: ${{ vars.OPENCODE_VISUAL_MODEL || 'opencode/space-bunny-free' }}
       MAX_ITERATIONS: "4"
 
     steps:
@@ -55,8 +66,13 @@ jobs:
         run: |
           # Lista utenti modificabile senza toccare il YAML:
           # Repo → Settings → Variables → Actions → OPENCODE_ALLOWED_USERS
-          ALLOWED_USERS="${{ vars.OPENCODE_ALLOWED_USERS || 'nik2208 vibe-maribit' }}"
+          ALLOWED_USERS="${{ vars.OPENCODE_ALLOWED_USERS || 'nik2208 vibe-maribit mrmorgan77' }}"
           if [ "$IS_MANUAL" = "true" ]; then exit 0; fi
+          ASSOC="${{ github.event.issue.author_association || github.event.comment.author_association }}"
+          if [ "$ASSOC" = "OWNER" ] || [ "$ASSOC" = "COLLABORATOR" ] || [ "$ASSOC" = "MEMBER" ]; then
+            echo "Utente '$COMMENT_AUTHOR' autorizzato con associazione $ASSOC."
+            exit 0
+          fi
           if ! echo " $ALLOWED_USERS " | grep -q " $COMMENT_AUTHOR "; then
             echo "Utente '$COMMENT_AUTHOR' non autorizzato. Interrompo."
             exit 1
@@ -209,11 +225,63 @@ jobs:
         run: |
           printf '%s' "$COMMENT_BODY" | sed -e 's|/opencode||g' -e 's|/oc||g' > /tmp/clean_prompt.txt
 
+      - name: Risolvi modello (specifico per run / immagini / fallback)
+        id: model
+        run: |
+          PROMPT_TEXT=$(cat /tmp/clean_prompt.txt)
+          FULL_TEXT="$COMMENT_BODY $ISSUE_BODY $ISSUE_TITLE"
+
+          # 1. Controllo se nel comando c'è una specifica di modello per questa run
+          # Supporta: --model <nome>, -m <nome>, model:<nome>, model=<nome>
+          RUN_MODEL=""
+          if [[ "$PROMPT_TEXT" =~ (--model|-m|model:)[[:space:]=]*([a-zA-Z0-9_\.\/-]+) ]]; then
+            RUN_MODEL="${BASH_REMATCH[2]}"
+            echo "🎯 Modello specificato dall'utente per questa run: $RUN_MODEL"
+            # Rimuove il flag del modello dal clean_prompt per non inquinare il prompt
+            PROMPT_TEXT=$(echo "$PROMPT_TEXT" | sed -E 's/(--model|-m|model:)[[:space:]=]*[a-zA-Z0-9_\.\/-]+//g')
+            echo "$PROMPT_TEXT" > /tmp/clean_prompt.txt
+          fi
+
+          # 2. Rilevamento immagini nell'issue / commento (markdown ![], tag <img>, o link ad immagini github user-attachments)
+          HAS_IMAGES=false
+          if echo "$FULL_TEXT" | grep -Eq '(!\[[^]]*\]\([^)]+\)|<img[[:space:]]|github\.com\/user-attachments\/assets|\.(png|jpe?g|gif|webp|bmp))'; then
+            HAS_IMAGES=true
+            echo "🖼️ Immagini rilevate nel testo dell'issue o del commento!"
+          fi
+
+          # 3. Risoluzione modello finale
+          FINAL_MODEL=""
+          if [ -n "$RUN_MODEL" ]; then
+            FINAL_MODEL="$RUN_MODEL"
+          elif [ "$HAS_IMAGES" = "true" ]; then
+            FINAL_MODEL="$VISUAL_MODEL"
+            echo "👁️ Utilizzo modello visual ($FINAL_MODEL) per elaborare le immagini."
+          else
+            FINAL_MODEL="$DEFAULT_MODEL"
+            echo "⚙️ Utilizzo modello di default configurato ($FINAL_MODEL)."
+          fi
+
+          # Normalizza: se il modello non contiene '/' aggiungi 'opencode/'
+          if [ -n "$FINAL_MODEL" ] && [[ "$FINAL_MODEL" != *"/"* ]]; then
+            FINAL_MODEL="opencode/$FINAL_MODEL"
+          fi
+
+          # Fallback di sicurezza: se per qualunque motivo è vuoto
+          [ -z "$FINAL_MODEL" ] && FINAL_MODEL="opencode/big-pickle"
+
+          echo "selected_model=$FINAL_MODEL" >> "$GITHUB_OUTPUT"
+          echo "has_images=$HAS_IMAGES" >> "$GITHUB_OUTPUT"
+          echo "### Configurazione Modello per questa run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Modello attivo**: \`$FINAL_MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Immagini rilevate**: \`$HAS_IMAGES\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Default progetto**: \`$DEFAULT_MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 6. Fase 1: PLAN ─────────────────────────────────────────────────────
       - name: "Fase 1 — Plan (analisi read-only)"
         if: steps.ctx.outputs.is_pr != 'true'
         run: |
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
           mkdir -p issue_plans
           PLAN_FILE="issue_plans/${{ steps.ctx.outputs.plan_key }}.md"
 
@@ -224,8 +292,7 @@ jobs:
             CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
             CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
 
-            opencode run --agent plan --model "$OPENCODE_MODEL" \
-              "Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
+            PLAN_PROMPT="Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
             Analizza il codebase e la richiesta, poi produci un piano di lavoro in Markdown
             con questa struttura ESATTA:
 
@@ -242,7 +309,16 @@ jobs:
             Contesto: $ISSUE_TITLE - $ISSUE_BODY
             $CONTEXT
 
-            Restituisci SOLO il documento Markdown del piano." | tee "$PLAN_FILE"
+            Restituisci SOLO il documento Markdown del piano."
+
+            if ! opencode run --agent plan --model "$CHOSEN_MODEL" "$PLAN_PROMPT" > "$PLAN_FILE"; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL. Fallback a opencode/big-pickle per la pianificazione..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                opencode run --agent plan --model "$CHOSEN_MODEL" "$PLAN_PROMPT" > "$PLAN_FILE" || true
+              fi
+            fi
+            cat "$PLAN_FILE"
 
             cp "$PLAN_FILE" /tmp/plan.md
             git add "$PLAN_FILE"
@@ -257,6 +333,7 @@ jobs:
         id: build_review
         run: |
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
           CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
           CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
           PLAN=""; [ -f /tmp/plan.md ] && PLAN="$(cat /tmp/plan.md)"
@@ -264,9 +341,8 @@ jobs:
           VERDICT="FAIL"
 
           for i in $(seq 1 "$MAX_ITERATIONS"); do
-            echo "::group::Iterazione $i — BUILD"
-            opencode run --agent build --auto --model "$OPENCODE_MODEL" \
-              "Sei in modalità BUILD. Implementa il piano completando TUTTI i task e
+            echo "::group::Iterazione $i — BUILD ($CHOSEN_MODEL)"
+            BUILD_PROMPT="Sei in modalità BUILD. Implementa il piano completando TUTTI i task e
             soddisfacendo TUTTI gli Acceptance Criteria. Applica le modifiche ai file.
 
             === PIANO ===
@@ -277,16 +353,23 @@ jobs:
 
             === FEEDBACK REVIEW PRECEDENTE ===
             $REVIEW_FEEDBACK"
+
+            if ! opencode run --agent build --auto --model "$CHOSEN_MODEL" "$BUILD_PROMPT"; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL. Fallback a opencode/big-pickle per la build..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                opencode run --agent build --auto --model "$CHOSEN_MODEL" "$BUILD_PROMPT" || true
+              fi
+            fi
             echo "::endgroup::"
 
             # Checkpoint: commit e push immediato sul branch remoto dopo la build
             git add .
-            git commit -m "OpenCode (big-pickle): build progress (iterazione $i)" || true
+            git commit -m "OpenCode ($CHOSEN_MODEL): build progress (iterazione $i)" || true
             git push origin "$BRANCH_NAME" || true
 
-            echo "::group::Iterazione $i — REVIEW"
-            opencode run --agent reviewer --auto --model "$OPENCODE_MODEL" \
-              "Verifica sul codice ATTUALE se OGNI Acceptance Criterion del piano è
+            echo "::group::Iterazione $i — REVIEW ($CHOSEN_MODEL)"
+            REVIEW_PROMPT="Verifica sul codice ATTUALE se OGNI Acceptance Criterion del piano è
             soddisfatto. Puoi eseguire build/lint/test ma NON modificare i file.
 
             === PIANO ===
@@ -294,8 +377,17 @@ jobs:
 
             Scrivi come ULTIMA riga ESATTAMENTE una di queste:
             - 'VERDICT: PASS'  se tutti i criteri sono soddisfatti
-            - 'VERDICT: FAIL'  altrimenti, seguita da un elenco puntato dei criteri NON
-              soddisfatti e di cosa manca." | tee /tmp/review.txt
+            - 'VERDICT: FAIL'  altrimenti, seguita da un elenco puntato dei criteri NON soddisfatti."
+
+            REVIEW_OUTPUT=$(opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" "$REVIEW_PROMPT" 2>&1 || true)
+            if echo "$REVIEW_OUTPUT" | grep -q "Unexpected server error" || [ -z "$REVIEW_OUTPUT" ]; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL nella review. Fallback a opencode/big-pickle..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                REVIEW_OUTPUT=$(opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" "$REVIEW_PROMPT" 2>&1 || true)
+              fi
+            fi
+            printf '%s\n' "$REVIEW_OUTPUT" | tee /tmp/review.txt
             echo "::endgroup::"
 
             if grep -q 'VERDICT: PASS' /tmp/review.txt; then
@@ -318,9 +410,10 @@ jobs:
         run: |
           API="$GH_API/repos/$REPO"
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
 
           git add .
-          git commit -m "OpenCode (big-pickle): $BRANCH_NAME" || echo "Niente di nuovo."
+          git commit -m "OpenCode ($CHOSEN_MODEL): $BRANCH_NAME" || echo "Niente di nuovo."
 
           # 1. Fetch dello stato più recente di origin/main
           echo "🔄 Fetching stato più aggiornato di origin/main..."
@@ -335,7 +428,7 @@ jobs:
             CONFLICTING_FILES=$(git diff --name-only --diff-filter=U)
             echo "File in conflitto: $CONFLICTING_FILES"
 
-            opencode run --agent build --auto --model "$OPENCODE_MODEL" \
+            opencode run --agent build --auto --model "$CHOSEN_MODEL" \
               "Ci sono conflitti di merge Git tra questo branch e il branch principale 'main'.
             File in conflitto:
             $CONFLICTING_FILES
@@ -382,8 +475,8 @@ jobs:
               -d "{
                 \"base\": \"main\",
                 \"head\": \"$BRANCH_NAME\",
-                \"title\": \"🤖 OpenCode: $BRANCH_NAME\",
-                \"body\": \"Generata automaticamente da OpenCode (big-pickle) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nChiude #$ISSUE_NUMBER\"
+                \"title\": \"🤖 OpenCode ($CHOSEN_MODEL): $BRANCH_NAME\",
+                \"body\": \"Generata automaticamente da OpenCode ($CHOSEN_MODEL) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nCloses #$ISSUE_NUMBER\"
               }")
             PR_NUMBER=$(echo "$RESP" | jq -r '.number // empty')
             # Se la PR esiste già (branch già pushato in precedenza)
@@ -435,13 +528,30 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"commit_title\": \"🤖 OpenCode merge: ${{ steps.ctx.outputs.branch_name }} (#$PR_NUMBER)\",
-              \"commit_message\": \"Merge automatico da OpenCode dopo VERDICT: PASS.\nChiude #$ISSUE_NUMBER\",
+              \"commit_message\": \"Merge automatico da OpenCode dopo VERDICT: PASS.\nCloses #$ISSUE_NUMBER\",
               \"merge_method\": \"squash\"
             }")
 
           MERGED=$(echo "$MERGE_RESP" | jq -r '.merged // false')
           if [ "$MERGED" = "true" ]; then
-            echo "✅ PR #$PR_NUMBER mergiata in main → build-apk.yml si attiverà automaticamente."
+            echo "✅ PR #$PR_NUMBER mergiata in main."
+
+            # Chiusura esplicita della issue per garantire che venga chiusa
+            if [ -n "$ISSUE_NUMBER" ] && [ "$ISSUE_NUMBER" != "$PR_NUMBER" ]; then
+              echo "🔒 Chiusura issue #$ISSUE_NUMBER..."
+              curl -s -X PATCH "$API/issues/$ISSUE_NUMBER" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/json" \
+                -d '{"state":"closed","state_reason":"completed"}' > /dev/null || true
+            fi
+
+            echo "🚀 Avvio esplicito di build-apk.yml per compilare la release APK..."
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$API/actions/workflows/build-apk.yml/dispatches" \
+              -d '{"ref":"main"}' || true
           else
             echo "⚠️ Merge automatico non riuscito: la PR #$PR_NUMBER resta aperta per risoluzione/revisione manuale."
             echo "$MERGE_RESP"
@@ -466,7 +576,38 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"body\":$BODY}" > /dev/null
 
-      # ── 11. Reazioni finali ──────────────────────────────────────────────────
+      # ── 11. Salvataggio di emergenza su timeout / cancellazione ───────────────
+      - name: Salvataggio progressi su timeout o cancellazione
+        if: cancelled()
+        continue-on-error: true
+        run: |
+          API="$GH_API/repos/$REPO"
+          BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
+          echo "⚠️ Job interrotto o timeout raggiunto: salvataggio di emergenza delle modifiche su $BRANCH_NAME..."
+          git status
+          git add .
+          git commit -m "OpenCode ($CHOSEN_MODEL): checkpoint emergenza (timeout/cancellazione)" || true
+          git push origin "$BRANCH_NAME" || true
+
+          # Commenta sull'issue avvisando che la run ha raggiunto il limite di tempo e il lavoro può essere ripreso
+          TARGET_ISSUE="$ISSUE_NUMBER"
+          [ -z "$TARGET_ISSUE" ] && TARGET_ISSUE="${{ steps.ctx.outputs.pr_number }}"
+          if [ -n "$TARGET_ISSUE" ]; then
+            MSG="⏱️ **Attenzione**: la sessione di lavoro ha raggiunto il limite di tempo o è stata interrotta.
+
+            Le modifiche prodotte finora sono state salvate e pushate sul branch \`$BRANCH_NAME\`.
+            Il lavoro può essere completato e ripreso avviando una nuova run con:
+            \`/oc riprendi e completa il lavoro sul branch $BRANCH_NAME\`"
+            JSON_BODY=$(jq -n --arg b "$MSG" '{"body": $b}')
+            curl -s -X POST "$API/issues/$TARGET_ISSUE/comments" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              -d "$JSON_BODY" > /dev/null || true
+          fi
+
+      # ── 12. Reazioni finali ──────────────────────────────────────────────────
       - name: Reazione finale 🚀
         if: success() && steps.react.outputs.path != ''
         continue-on-error: true

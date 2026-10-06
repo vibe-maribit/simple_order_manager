@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -85,8 +91,9 @@ List<WorkOrder> _buildOrders() => <WorkOrder>[
 /// Pumpa la sola tab Documenti con un dataset controllato.
 Future<void> _pumpDocumentsTab(
   WidgetTester tester,
-  List<WorkOrder> orders,
-) async {
+  List<WorkOrder> orders, {
+  BrandProfile brand = BrandProfile.empty,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light,
@@ -94,6 +101,7 @@ Future<void> _pumpDocumentsTab(
         orders: orders,
         clients: const <Client>[],
         catalog: const <CatalogItem>[],
+        brand: brand,
         onSaveOrder: (_) {},
         onDeleteOrder: (_) {},
         onStatusChange: (_, __) {},
@@ -102,6 +110,16 @@ Future<void> _pumpDocumentsTab(
   );
   await tester.pumpAndSettle();
 }
+
+/// Profilo brand di prova: identico a quello salvato dal pannello
+/// Impostazioni.
+const BrandProfile _brandProfile = BrandProfile(
+  fullName: 'Andrea Morgante',
+  role: 'Tecnico Commerciale',
+  phone1: '333 1234567',
+  website: 'www.colormeter.it',
+  emailPrimary: 'info@colormeter.it',
+);
 
 /// Intercetta gli appunti: in flutter_test il canale di piattaforma non ha un
 /// handler di default e `Clipboard.setData` solleverebbe un errore.
@@ -133,6 +151,78 @@ Finder _inCard(String orderId, Finder matcher) => find.descendant(
       of: find.byKey(Key('document-card-$orderId')),
       matching: matcher,
     );
+
+/// Intercetta il canale nativo di `share_plus` e restituisce la lista delle
+/// chiamate ricevute, così il test può verificare il file condiviso senza
+/// aprire il foglio di sistema.
+List<MethodCall> _mockSharePlus(WidgetTester tester) {
+  const channel = MethodChannel('dev.fluttercommunity.plus/share');
+  final calls = <MethodCall>[];
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (call) async {
+      calls.add(call);
+      return 'file saved';
+    },
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
+  return calls;
+}
+
+/// Intercetta il canale nativo di `printing` dichiarando che la
+/// rasterizzazione non è disponibile: l'anteprima mostra il proprio
+/// fallback senza avviare I/O reali sul file.
+void _mockPrinting(WidgetTester tester) {
+  const channel = MethodChannel('net.nfet.printing');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (call) async => call.method == 'printingInfo'
+        ? <String, dynamic>{'canRaster': false}
+        : null,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
+}
+
+/// Lascia completare l'I/O reale su disco (esportazione PDF) e fa avanzare la
+/// UI fino a quando non ci sono più animazioni in coda.
+Future<void> _settleExport(WidgetTester tester) async {
+  for (var round = 0; round < 20; round++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 60)),
+    );
+    // Avanza anche il tempo finto: gli snackbar in coda (es. "Riassunto
+    // copiato") devono scadere prima che quello del PDF sia visibile.
+    await tester.pump(const Duration(milliseconds: 400));
+    final done = tester.any(find.textContaining('PDF generato')) ||
+        tester.any(find.textContaining('Generazione PDF non riuscita'));
+    if (done) break;
+  }
+  // Il raster di `PdfPreview` è debounced a 300 ms: fa avanzare il tempo
+  // finto prima del settle definitivo, così il fallback dell'anteprima ha
+  // il tempo di rendersi.
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pumpAndSettle();
+}
+
+/// Chiude la schermata di anteprima PDF e torna alla lista documenti.
+Future<void> _closePreview(WidgetTester tester) async {
+  // Lo snackbar "PDF generato" copre la barra azioni in basso: si attende la
+  // sua scadenza prima di interagire con "Chiudi".
+  await tester.pump(const Duration(seconds: 4));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('documents-pdf-preview-close')));
+  await tester.pumpAndSettle();
+}
 
 /// Scorre la lista documenti verso l'alto finché [matcher] è nel tree.
 Future<void> _scrollUntilVisible(
@@ -468,6 +558,102 @@ void main() {
       expect(find.text('Elimina'), findsOneWidget);
     });
 
+    testWidgets('il dettaglio mostra l\'header brand con i contatti', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(
+        tester,
+        _buildOrders(),
+        brand: _brandProfile,
+      );
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      // Nome e contatti del mittente, nello stesso ordine del PDF.
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('Andrea Morgante'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('Tecnico Commerciale'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('333 1234567'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('www.colormeter.it'),
+        ),
+        findsOneWidget,
+      );
+      // L'header è il primo blocco visivo del foglio, prima del numero
+      // documento e dei dati del cliente.
+      final sheetTitle = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('ORD-2026-201'),
+      );
+      expect(
+        tester.getTopLeft(header).dy,
+        lessThan(tester.getTopLeft(sheetTitle).dy),
+      );
+      expect(find.textContaining('Cliente:'), findsWidgets);
+    });
+
+    testWidgets('senza profilo l\'header del dettaglio usa il fallback', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text(BrandProfile.documentHeaderFallback),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('la AppBar Documenti mostra il brand dinamico', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(
+        tester,
+        _buildOrders(),
+        brand: _brandProfile,
+      );
+
+      expect(find.text('Andrea Morgante'), findsOneWidget);
+      expect(find.text('Colormeter'), findsNothing);
+    });
+
     testWidgets('il tap sull\'azione primaria apre il dettaglio', (
       WidgetTester tester,
     ) async {
@@ -500,9 +686,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Lo snackbar di conferma è visibile.
       expect(find.text('Riassunto di ORD-2026-201 copiato'), findsOneWidget);
-
       final stored = await Clipboard.getData(Clipboard.kTextPlain);
       expect(stored?.text, isNotNull);
       final text = stored!.text!;
@@ -514,6 +698,126 @@ void main() {
       expect(text, contains('Voci: 1'));
     });
 
+      await _settleExport(tester);
+
+      // La schermata di anteprima renderizza il file appena scritto.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('ord-2026-201-cliente-gamma.pdf'), findsOneWidget);
+
+      // Snackbar di conferma con nome file e dimensione.
+      expect(
+        find.textContaining(
+          'PDF generato: ord-2026-201-cliente-gamma.pdf',
+        ),
+        findsOneWidget,
+      );
+
+      // Il tap su "Condividi" apre il foglio nativo con il file.
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
+
+      // La condivisione nativa riceve il file appena scritto.
+      expect(shareCalls, hasLength(1));
+      expect(shareCalls.single.method, 'share');
+      final args = shareCalls.single.arguments as Map<Object?, Object?>;
+      expect(args['mimeTypes'], contains('application/pdf'));
+      final paths = (args['paths'] as List<Object?>).cast<String>();
+      final exported = paths.single;
+      expect(exported, endsWith('ord-2026-201-cliente-gamma.pdf'));
+
+      // Il file esiste e contiene un PDF ispezionabile.
+      final file = File(exported);
+      expect(file.existsSync(), isTrue);
+      expect(file.lengthSync(), greaterThan(500));
+      final bytes = file.readAsBytesSync();
+      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      final content = String.fromCharCodes(bytes);
+      expect(content, contains('%%EOF'));
+      expect(content, contains('ORD-2026-201'));
+      expect(content, contains('Cliente'));
+      expect(content, contains('Gamma'));
+      expect(content, contains('Subtotale'));
+      expect(content, contains('Totale'));
+
+      await _closePreview(tester);
+    });
+
+    testWidgets('il dettaglio espone "Genera PDF e condividi"', (
+      WidgetTester tester,
+    ) async {
+      final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-prev-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-prev-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Genera PDF e condividi'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('documents-detail-export-pdf')));
+      await _settleExport(tester);
+
+      // Stesso flusso della card: generazione → anteprima.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('prev-2026-101-cliente-alfa.pdf'), findsOneWidget);
+      expect(
+        find.textContaining('PDF generato: prev-2026-101-cliente-alfa.pdf'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
+      expect(shareCalls, hasLength(1));
+
+      await _closePreview(tester);
+    });
+
+    testWidgets('lo sheet "Invia per firma" espone "Genera PDF e condividi"', (
+      WidgetTester tester,
+    ) async {
+      _mockClipboard(tester);
+      final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-ord-2');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-secondary-action-kpi-ord-2')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Invia per firma · ORD-2026-202'),
+          findsOneWidget);
+      expect(
+          find.byKey(const Key('documents-sign-export-pdf')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('documents-sign-export-pdf')));
+      await _settleExport(tester);
+
+      // Stesso flusso della card: generazione → anteprima.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('ord-2026-202-cliente-delta.pdf'), findsOneWidget);
+      expect(
+        find.textContaining('PDF generato: ord-2026-202-cliente-delta.pdf'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
+      expect(shareCalls, hasLength(1));
+
+      await _closePreview(tester);
+    });
+  });
+
+  group('Azioni secondarie → appunti', () {
     testWidgets('"Invia per firma" copia il riepilogo e apre lo sheet', (
       WidgetTester tester,
     ) async {

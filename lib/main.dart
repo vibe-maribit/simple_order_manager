@@ -4,8 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:simple_order_manager/documents/document_pdf.dart';
+import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
+import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/settings/brand_header.dart';
+import 'package:simple_order_manager/settings/brand_settings_screen.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
+import 'package:simple_order_manager/utils/format.dart';
 import 'package:simple_order_manager/version.dart';
+
+/// Re-esporta modelli e formatatori: i test e gli strumenti continuano a
+/// importare un solo file (`main.dart`) come in precedenza.
+export 'package:simple_order_manager/models/models.dart';
+export 'package:simple_order_manager/utils/format.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,347 +24,16 @@ void main() async {
 }
 
 // ==========================================
-// MODELS
-// ==========================================
-
-class Client {
-  final String id;
-  final String name;
-  final String phone;
-  final String email;
-  final String address;
-  final String notes;
-
-  Client({
-    required this.id,
-    required this.name,
-    this.phone = '',
-    this.email = '',
-    this.address = '',
-    this.notes = '',
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'phone': phone,
-        'email': email,
-        'address': address,
-        'notes': notes,
-      };
-
-  factory Client.fromJson(Map<String, dynamic> json) => Client(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        phone: json['phone'] as String? ?? '',
-        email: json['email'] as String? ?? '',
-        address: json['address'] as String? ?? '',
-        notes: json['notes'] as String? ?? '',
-      );
-
-  Client copyWith({
-    String? id,
-    String? name,
-    String? phone,
-    String? email,
-    String? address,
-    String? notes,
-  }) {
-    return Client(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      phone: phone ?? this.phone,
-      email: email ?? this.email,
-      address: address ?? this.address,
-      notes: notes ?? this.notes,
-    );
-  }
-}
-
-class CatalogItem {
-  final String id;
-  final String name;
-  final String description;
-  final double unitPrice;
-  final double taxRate; // in percentage, e.g. 22.0
-
-  CatalogItem({
-    required this.id,
-    required this.name,
-    this.description = '',
-    required this.unitPrice,
-    this.taxRate = 22.0,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'unitPrice': unitPrice,
-        'taxRate': taxRate,
-      };
-
-  factory CatalogItem.fromJson(Map<String, dynamic> json) => CatalogItem(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        description: json['description'] as String? ?? '',
-        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
-        taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
-      );
-
-  CatalogItem copyWith({
-    String? id,
-    String? name,
-    String? description,
-    double? unitPrice,
-    double? taxRate,
-  }) {
-    return CatalogItem(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      unitPrice: unitPrice ?? this.unitPrice,
-      taxRate: taxRate ?? this.taxRate,
-    );
-  }
-}
-
-class OrderItem {
-  final String id;
-  final String catalogItemId;
-  final String name;
-  final String description;
-  final double unitPrice;
-  final double taxRate;
-  double quantity;
-
-  OrderItem({
-    required this.id,
-    required this.catalogItemId,
-    required this.name,
-    this.description = '',
-    required this.unitPrice,
-    this.taxRate = 22.0,
-    this.quantity = 1.0,
-  });
-
-  double get subtotal => unitPrice * quantity;
-  double get taxAmount => subtotal * (taxRate / 100);
-  double get total => subtotal + taxAmount;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'catalogItemId': catalogItemId,
-        'name': name,
-        'description': description,
-        'unitPrice': unitPrice,
-        'taxRate': taxRate,
-        'quantity': quantity,
-      };
-
-  factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
-        id: json['id'] as String? ?? '',
-        catalogItemId: json['catalogItemId'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        description: json['description'] as String? ?? '',
-        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
-        taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
-        quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
-      );
-}
-
-/// Stati del flusso di un documento (preventivo/ordine).
-///
-/// I colori sono derivati dai token di [AppColors] invece che dai `Colors.*`
-/// della libreria Material, così le pill di stato restano coerenti con il
-/// design system anche in light mode.
-enum OrderStatus {
-  bozza(
-    'Bozza',
-    color: AppColors.outline,
-    pillBackground: AppColors.surfaceContainerHigh,
-    pillForeground: AppColors.onSurfaceVariant,
-  ),
-  inAttesa(
-    'In attesa',
-    color: AppColors.tertiaryContainer,
-    pillBackground: AppColors.tertiaryFixed,
-    pillForeground: AppColors.onTertiaryFixedVariant,
-  ),
-  approvato(
-    'Approvato',
-    color: AppColors.secondary,
-    pillBackground: AppColors.secondaryContainer,
-    pillForeground: AppColors.onSecondaryContainer,
-  ),
-  completato(
-    'Completato',
-    color: AppColors.primary,
-    pillBackground: AppColors.primaryContainer,
-    pillForeground: AppColors.onPrimary,
-  );
-
-  final String label;
-
-  /// Colore d'accento dello stato (icona avatar, dot della pill).
-  final Color color;
-
-  /// Sfondo della pill di stato.
-  final Color pillBackground;
-
-  /// Testo della pill di stato.
-  final Color pillForeground;
-
-  const OrderStatus(
-    this.label, {
-    required this.color,
-    required this.pillBackground,
-    required this.pillForeground,
-  });
-
-  static OrderStatus fromString(String? val) {
-    for (final s in OrderStatus.values) {
-      if (s.name == val || s.label == val) return s;
-    }
-    return OrderStatus.bozza;
-  }
-}
-
-/// Tipo di documento: preventivo (offerta) o ordine (lavoro confermato).
-///
-/// Il campo non esisteva nei dati salvati: [DocType.inferFromNumber] deduce il
-/// tipo dal prefisso di [WorkOrder.orderNumber] (`PREV-` ⇒ preventivo,
-/// `ORD-` ⇒ ordine) così i dati preesistenti non perdono informazioni e non
-/// richiedono migrazioni.
-enum DocType {
-  preventivo('Preventivo', 'PREV-'),
-  ordine('Ordine', 'ORD-');
-
-  /// Label mostrata nei chip filtro e nelle card.
-  final String label;
-
-  /// Prefisso convenzionale del numero documento.
-  final String prefix;
-
-  const DocType(this.label, this.prefix);
-
-  /// Converte la serializzazione (`docType.name`) in enum, `null` se ignota.
-  static DocType? fromString(String? val) {
-    for (final t in DocType.values) {
-      if (t.name == val || t.label == val) return t;
-    }
-    return null;
-  }
-
-  /// Deduce il tipo documento dal prefisso del numero (fallback backward
-  /// compatible sui dati salvati prima dell'introduzione di `docType`).
-  static DocType inferFromNumber(String orderNumber) {
-    final normalized = orderNumber.trim().toUpperCase();
-    return normalized.startsWith(ordine.prefix) ? ordine : preventivo;
-  }
-}
-
-class WorkOrder {
-  final String id;
-  final String orderNumber;
-  final String clientId;
-  final String clientName;
-  final List<OrderItem> items;
-  OrderStatus status;
-  final DateTime date;
-  final String notes;
-
-  /// Tipo del documento: se non passato esplicitamente viene inferito dal
-  /// prefisso di [orderNumber] (vedi [DocType.inferFromNumber]).
-  final DocType docType;
-
-  WorkOrder({
-    required this.id,
-    required this.orderNumber,
-    required this.clientId,
-    required this.clientName,
-    required this.items,
-    this.status = OrderStatus.bozza,
-    required this.date,
-    this.notes = '',
-    DocType? docType,
-  }) : docType = docType ?? DocType.inferFromNumber(orderNumber);
-
-  double get subtotal => items.fold(0.0, (sum, i) => sum + i.subtotal);
-  double get taxTotal => items.fold(0.0, (sum, i) => sum + i.taxAmount);
-  double get grandTotal => subtotal + taxTotal;
-
-  /// Etichetta sintetica del tipo documento, es. `Preventivo`.
-  String get docTypeLabel => docType.label;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'orderNumber': orderNumber,
-        'clientId': clientId,
-        'clientName': clientName,
-        'items': items.map((i) => i.toJson()).toList(),
-        'status': status.name,
-        'docType': docType.name,
-        'date': date.toIso8601String(),
-        'notes': notes,
-      };
-
-  factory WorkOrder.fromJson(Map<String, dynamic> json) {
-    final orderNumber = json['orderNumber'] as String? ?? '';
-    return WorkOrder(
-      id: json['id'] as String? ?? '',
-      orderNumber: orderNumber,
-      clientId: json['clientId'] as String? ?? '',
-      clientName: json['clientName'] as String? ?? '',
-      items: (json['items'] as List<dynamic>?)
-              ?.map((i) => OrderItem.fromJson(i as Map<String, dynamic>))
-              .toList() ??
-          [],
-      status: OrderStatus.fromString(json['status'] as String?),
-      // Fallback sui dati pre-1.2.0: nessun campo `docType` ⇒ inferenza dal
-      // prefisso del numero documento, senza perdita dei dati esistenti.
-      docType: DocType.fromString(json['docType'] as String?) ??
-          DocType.inferFromNumber(orderNumber),
-      date: json['date'] != null
-          ? DateTime.tryParse(json['date'] as String) ?? DateTime.now()
-          : DateTime.now(),
-      notes: json['notes'] as String? ?? '',
-    );
-  }
-
-  WorkOrder copyWith({
-    String? id,
-    String? orderNumber,
-    String? clientId,
-    String? clientName,
-    List<OrderItem>? items,
-    OrderStatus? status,
-    DateTime? date,
-    String? notes,
-    DocType? docType,
-  }) {
-    return WorkOrder(
-      id: id ?? this.id,
-      orderNumber: orderNumber ?? this.orderNumber,
-      clientId: clientId ?? this.clientId,
-      clientName: clientName ?? this.clientName,
-      items: items ?? this.items,
-      status: status ?? this.status,
-      date: date ?? this.date,
-      notes: notes ?? this.notes,
-      docType: docType ?? this.docType,
-    );
-  }
-}
-
-// ==========================================
 // PERSISTENCE (STORAGE SERVICE)
-// ==========================================
+// =========================================
 
 class StorageService {
   static const _keyClients = 'simple_orders_clients_v1';
   static const _keyCatalog = 'simple_orders_catalog_v1';
   static const _keyOrders = 'simple_orders_data_v1';
+
+  /// Profilo del mittente: JSON con logo (solo path) e contatti.
+  static const _keyBrand = 'simple_orders_brand_v1';
 
   static Future<List<Client>> loadClients() async {
     final prefs = await SharedPreferences.getInstance();
@@ -413,6 +93,30 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(orders.map((o) => o.toJson()).toList());
     await prefs.setString(_keyOrders, jsonStr);
+  }
+
+  /// Legge il profilo del mittente.
+  ///
+  /// Diversamente dalle altre liste **non esiste un seed**: un profilo vuoto è
+  /// uno stato valido (l'header ripiega sul testo di fallback). Chiave assente,
+  /// stringa vuota o JSON corrotto ⇒ [BrandProfile.empty], senza eccezioni.
+  static Future<BrandProfile> loadBrand() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyBrand);
+    if (raw == null || raw.isEmpty) return BrandProfile.empty;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return BrandProfile.fromJson(json);
+    } catch (_) {
+      return BrandProfile.empty;
+    }
+  }
+
+  /// Salva il profilo del mittente (i byte del logo restano su disco: qui si
+  /// registra solo il path, vedi `BrandLogoStore`).
+  static Future<void> saveBrand(BrandProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBrand, jsonEncode(profile.toJson()));
   }
 
   static List<Client> _seedClients() {
@@ -544,10 +248,8 @@ class StorageService {
   }
 }
 
-// ==========================================
-// APP ROOT
-// ==========================================
-
+// ===================================// APP ROOT
+// ===================================
 class SimpleOrderManagerApp extends StatelessWidget {
   const SimpleOrderManagerApp({super.key});
 
@@ -562,10 +264,8 @@ class SimpleOrderManagerApp extends StatelessWidget {
   }
 }
 
-// ==========================================
-// MAIN DASHBOARD
-// ==========================================
-
+// ===================================// MAIN DASHBOARD
+// ===================================
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
 
@@ -581,6 +281,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   List<CatalogItem> _catalog = [];
   List<WorkOrder> _orders = [];
 
+  /// Dati del mittente (logo + contatti) usati dall'header dei documenti.
+  BrandProfile _brand = BrandProfile.empty;
+
   @override
   void initState() {
     super.initState();
@@ -588,15 +291,25 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    final clients = await StorageService.loadClients();
-    final catalog = await StorageService.loadCatalog();
-    final orders = await StorageService.loadOrders();
+    // Le quattro letture sono indipendenti: girano in parallelo così il primo
+    // avvio non somma i tempi delle quattro chiamate.
+    final loaded = await Future.wait(<Future<Object>>[
+      StorageService.loadClients(),
+      StorageService.loadCatalog(),
+      StorageService.loadOrders(),
+      StorageService.loadBrand(),
+    ]);
+    final clients = loaded[0] as List<Client>;
+    final catalog = loaded[1] as List<CatalogItem>;
+    final orders = loaded[2] as List<WorkOrder>;
+    final brand = loaded[3] as BrandProfile;
 
     if (mounted) {
       setState(() {
         _clients = clients;
         _catalog = catalog;
         _orders = orders;
+        _brand = brand;
         _isLoading = false;
       });
     }
@@ -612,6 +325,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
   Future<void> _saveOrders() async {
     await StorageService.saveOrders(_orders);
+  }
+
+  Future<void> _saveBrand() async {
+    await StorageService.saveBrand(_brand);
   }
 
   // --- Client Actions ---
@@ -684,6 +401,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     _saveOrders();
   }
 
+  // --- Brand Actions ---
+  void _updateBrand(BrandProfile brand) {
+    setState(() => _brand = brand);
+    _saveBrand();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -695,6 +418,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         orders: _orders,
         clients: _clients,
         catalog: _catalog,
+        brand: _brand,
         onSaveOrder: _addOrUpdateOrder,
         onDeleteOrder: _deleteOrder,
         onStatusChange: _updateOrderStatus,
@@ -708,6 +432,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         catalog: _catalog,
         onSaveItem: _addOrUpdateCatalogItem,
         onDeleteItem: _deleteCatalogItem,
+      ),
+      SettingsTab(
+        brand: _brand,
+        onBrandChange: _updateBrand,
       ),
     ];
 
@@ -732,16 +460,19 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             selectedIcon: Icon(Icons.inventory_2),
             label: 'Catalogo',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Impostazioni',
+          ),
         ],
       ),
     );
   }
 }
 
-// ==========================================
-// TAB 1: PREVENTIVI & SCHEDE LAVORO
-// ==========================================
-
+// ===================================// TAB 1: PREVENTIVI & SCHEDE LAVORO
+// ===================================
 class OrdersTab extends StatefulWidget {
   final List<WorkOrder> orders;
   final List<Client> clients;
@@ -749,6 +480,15 @@ class OrdersTab extends StatefulWidget {
   final ValueChanged<WorkOrder> onSaveOrder;
   final ValueChanged<String> onDeleteOrder;
   final void Function(String orderId, OrderStatus newStatus) onStatusChange;
+
+  /// Profilo del mittente mostrato in AppBar, nel dettaglio e stampato nel PDF.
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza profilo l'app si comporta come prima della feature.
+  final BrandProfile brand;
+
+  /// Callback usato dalla tab Impostazioni per propagare il profile aggiornato.
+  final ValueChanged<BrandProfile> onBrandChange;
 
   const OrdersTab({
     super.key,
@@ -758,12 +498,17 @@ class OrdersTab extends StatefulWidget {
     required this.onSaveOrder,
     required this.onDeleteOrder,
     required this.onStatusChange,
+    this.brand = BrandProfile.empty,
+    this.onBrandChange = _noopBrandChange,
   });
 
   @override
   State<OrdersTab> createState() => _OrdersTabState();
 }
 
+/// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
+/// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
+void _noopBrandChange(BrandProfile brand) {}
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
   tutti('Tutti'),
@@ -783,21 +528,6 @@ enum _DocumentFilter {
       };
 }
 
-/// Mesi in italiano per la data sulle card e per l'header "Riepilogo".
-const List<String> _kMonthsIt = <String>[
-  'Gennaio',
-  'Febbraio',
-  'Marzo',
-  'Aprile',
-  'Maggio',
-  'Giugno',
-  'Luglio',
-  'Agosto',
-  'Settembre',
-  'Ottobre',
-  'Novembre',
-  'Dicembre',
-];
 
 /// Frazione di larghezza occupata da ogni KPI card nel carousel orizzontale.
 const double kKpiCardExtentFactor = 0.78;
@@ -815,20 +545,6 @@ class _SnapScrollBehavior extends ScrollBehavior {
       const PageScrollPhysics();
 }
 
-/// Numero formattato in stile italiano con separatori delle migliaia e
-/// virgola decimale, es. `1.234,56`.
-String formatEuroNumber(double value) {
-  final negative = value < 0;
-  final fixed = value.abs().toStringAsFixed(2);
-  final parts = fixed.split('.');
-  final integer = parts.first;
-  final decimals = parts.length > 1 ? parts[1] : '00';
-  final grouped = integer.replaceAllMapped(
-    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => '.',
-  );
-  return '${negative ? '-' : ''}$grouped,$decimals';
-}
 
 /// Importo formattato con separatori italiani e simbolo euro (`€ 1.234,56`).
 ///
@@ -839,7 +555,7 @@ String formatEuro(double value) => value < 0
 
 /// Data in formato italiano abbreviato, es. `06 ott 2026`.
 String formatItalianDate(DateTime date) {
-  final month = _kMonthsIt[date.month - 1].toLowerCase();
+  final month = kMonthsIt[date.month - 1].toLowerCase();
   final short = month.length > 4 ? month.substring(0, 3) : month;
   final day = date.day.toString().padLeft(2, '0');
   return '$day $short ${date.year}';
@@ -852,7 +568,6 @@ class _OrdersTabState extends State<OrdersTab> {
   static const Key kBannerCtaKey = Key('documents-banner-cta');
   static const Key kBannerKey = Key('documents-banner');
   static const Key kKpiCarouselKey = Key('documents-kpi-carousel');
-
   /// Prefissi delle azioni secondarie per chiave di test.
   static String secondaryActionKey(String orderId) =>
       'documents-secondary-action-$orderId';
@@ -867,6 +582,9 @@ class _OrdersTabState extends State<OrdersTab> {
   _DocumentFilter _filter = _DocumentFilter.tutti;
   DateTime _lastSync = DateTime.now();
 
+  /// Evita generazioni concorrenti dello stesso documento.
+  bool _pdfExportRunning = false;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -875,10 +593,8 @@ class _OrdersTabState extends State<OrdersTab> {
     super.dispose();
   }
 
-  // ==========================================
-  // FORMATTING HELPERS
-  // ==========================================
-
+  // ==========================================  // FORMATTING HELPERS
+  // ===================================
   /// Testo relativo usato nella barra di stato sync.
   String _relativeSyncLabel() {
     final minutes = DateTime.now().difference(_lastSync).inMinutes;
@@ -889,10 +605,8 @@ class _OrdersTabState extends State<OrdersTab> {
     return hours == 1 ? '1 ora fa' : '$hours ore fa';
   }
 
-  // ==========================================
-  // KPI (derivati da _orders)
-  // ==========================================
-
+  // ==========================================  // KPI (derivati da _orders)
+  // ===================================
   /// Numero di documenti che soddisfano [test], insieme al volume `grandTotal`.
   ({int count, double amount}) _aggregate(
     bool Function(WorkOrder) test,
@@ -927,10 +641,8 @@ class _OrdersTabState extends State<OrdersTab> {
         (o) => o.status == OrderStatus.inAttesa,
       );
 
-  // ==========================================
-  // FILTERS
-  // ==========================================
-
+  // ==========================================  // FILTERS
+  // ===================================
   /// Documenti che superano ricerca testuale + chip filtro attivo.
   List<WorkOrder> get _filteredDocuments {
     final query = _searchQuery.trim().toLowerCase();
@@ -973,12 +685,10 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
-  // ==========================================
-  // CARD ACTIONS
-  // ==========================================
-
-  /// Copia negli appunti un riassunto leggibile del documento (nessuna
-  /// dipendenza `share_plus`: l'app è offline-first).
+  // ==========================================  // CARD ACTIONS
+  // ===================================
+  /// Copia negli appunti un riassunto leggibile del documento, per le azioni
+  /// che non richiedono un file (bozza e documento in attesa).
   Future<void> _copyDocumentSummary(WorkOrder order) async {
     final items = order.items.length;
     final summary = StringBuffer()
@@ -1015,6 +725,79 @@ class _OrdersTabState extends State<OrdersTab> {
       case OrderStatus.approvato:
       case OrderStatus.completato:
         break;
+  /// Cliente della rubrica associato al documento, se presente.
+  Client? _clientFor(WorkOrder order) {
+    for (final client in widget.clients) {
+      if (client.id == order.clientId) return client;
+    }
+    return null;
+  }
+
+  /// Genera il PDF reale del documento, lo salva nella cartella dei documenti
+  /// dell'app e ne apre la schermata di anteprima.
+  ///
+  /// Usata dall'azione "Condividi PDF" delle card, dal dettaglio del
+  /// documento e dal flusso "Invia per firma". La condivisione è un'azione
+  /// esplicita all'interno dell'anteprima.
+  Future<void> _exportDocumentPdf(WorkOrder order) async {
+    if (_pdfExportRunning) return;
+    _pdfExportRunning = true;
+    try {
+      final result = await DocumentPdfService.instance.export(
+        order,
+        client: _clientFor(order),
+        brand: widget.brand,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          key: const Key('documents-pdf-snackbar'),
+          content: Text(
+            'PDF generato: ${result.fileName} · ${result.readableSize}',
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => DocumentPdfPreviewScreen(
+            result: result,
+            title: '${order.docType.label} ${order.orderNumber}',
+            subject:
+                '${order.docType.label} ${order.orderNumber} · ${order.clientName}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          key: const Key('documents-pdf-error-snackbar'),
+          backgroundColor: AppColors.error,
+          content: Text('Generazione PDF non riuscita: $error'),
+        ),
+      );
+    } finally {
+      _pdfExportRunning = false;
+    }
+  }
+
+  /// Azione secondaria della card: per bozza e documento in attesa copia il
+  /// riassunto e apre il flusso dedicato; per i documenti approvati o
+  /// completati genera il PDF reale e lo condivide.
+  Future<void> _handleSecondaryAction(WorkOrder order) async {
+    switch (order.status) {
+      case OrderStatus.inAttesa:
+        await _copyDocumentSummary(order);
+        if (!mounted) return;
+        _trackShipment(order);
+      case OrderStatus.bozza:
+        await _copyDocumentSummary(order);
+        if (!mounted) return;
+        _shareOrder(order);
+      case OrderStatus.approvato:
+      case OrderStatus.completato:
+        await _exportDocumentPdf(order);
     }
   }
 
@@ -1067,7 +850,21 @@ class _OrdersTabState extends State<OrdersTab> {
               ),
               const SizedBox(height: AppSpacing.spaceMd),
               _buildSummaryBlock(order),
-              const SizedBox(height: AppSpacing.spaceLg),
+              const SizedBox(height: AppSpacing.spaceMd),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('documents-sign-export-pdf'),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: const Text('Genera PDF e condividi'),
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _exportDocumentPdf(order);
+                  },
+                ),
+              ),
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
               Row(
                 children: [
                   Expanded(
@@ -1260,10 +1057,8 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
-  // ==========================================
-  // BUILD
-  // ==========================================
-
+  // ==========================================  // BUILD
+  // ===================================
   @override
   Widget build(BuildContext context) {
     final documents = _filteredDocuments;
@@ -1368,7 +1163,7 @@ class _OrdersTabState extends State<OrdersTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Colormeter',
+                  widget.brand.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.labelSm.copyWith(
@@ -1519,7 +1314,7 @@ class _OrdersTabState extends State<OrdersTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Riepilogo ${_kMonthsIt[now.month - 1]} ${now.year}',
+                  'Riepilogo ${kMonthsIt[now.month - 1]} ${now.year}',
                   style: AppTextStyles.headlineMd.copyWith(
                     color: AppColors.onSurface,
                   ),
@@ -1753,7 +1548,6 @@ class _OrdersTabState extends State<OrdersTab> {
           suffixIcon: _searchQuery.isEmpty
               ? null
               : IconButton(
-                  key: kClearSearchKey,
                   icon: const Icon(Icons.close, size: 18),
                   tooltip: 'Cancella ricerca',
                   onPressed: _clearSearch,
@@ -2162,7 +1956,9 @@ class _OrdersTabState extends State<OrdersTab> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
+        // Il foglio parte più aperto del passato: con l'header brand in alto
+        // numero, cliente, voci e pulsanti restano visibili senza scorrere.
+        initialChildSize: 0.95,
         maxChildSize: 0.95,
         minChildSize: 0.5,
         expand: false,
@@ -2172,6 +1968,13 @@ class _OrdersTabState extends State<OrdersTab> {
             child: ListView(
               controller: scrollController,
               children: [
+                // Header brand: identico al blocco stampato nel PDF, così
+                // anteprima a schermo e stampa coincidono.
+                BrandHeader(
+                  key: const Key('documents-detail-brand-header'),
+                  brand: widget.brand,
+                  dense: true,
+                ),
                 Center(
                   child: Container(
                     width: 40,
@@ -2321,7 +2124,20 @@ class _OrdersTabState extends State<OrdersTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('documents-detail-export-pdf'),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Genera PDF e condividi'),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _exportDocumentPdf(order);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -2411,10 +2227,8 @@ class _OrdersTabState extends State<OrdersTab> {
   }
 }
 
-// ==========================================
-// ORDER EDIT / CREATE SCREEN
-// ==========================================
-
+// ===================================// ORDER EDIT / CREATE SCREEN
+// ===================================
 class OrderEditScreen extends StatefulWidget {
   final WorkOrder? existingOrder;
   final List<Client> clients;
@@ -2935,10 +2749,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   }
 }
 
-// ==========================================
-// TAB 2: ANAGRAFICA CLIENTI
-// ==========================================
-
+// ===================================// TAB 2: ANAGRAFICA CLIENTI
+// ===================================
 class ClientsTab extends StatefulWidget {
   final List<Client> clients;
   final ValueChanged<Client> onSaveClient;
@@ -3326,10 +3138,8 @@ class _ClientsTabState extends State<ClientsTab> {
   }
 }
 
-// ==========================================
-// TAB 3: CATALOGO PRODOTTI & SERVIZI
-// ==========================================
-
+// ===================================// TAB 3: CATALOGO PRODOTTI & SERVIZI
+// ===================================
 class CatalogTab extends StatefulWidget {
   final List<CatalogItem> catalog;
   final ValueChanged<CatalogItem> onSaveItem;
