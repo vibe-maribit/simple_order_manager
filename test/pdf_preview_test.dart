@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:printing/printing.dart';
 
 import 'package:simple_order_manager/documents/document_pdf.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
@@ -62,7 +61,9 @@ void main() {
     samplePdfFile = File('${tempDir.path}/test-doc-101.pdf');
     // Scrive un finto PDF valido su disco
     await samplePdfFile.writeAsBytes(
-      <int>[...'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'.codeUnits],
+      <int>[
+        ...'%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'.codeUnits
+      ],
     );
     sampleResult = PdfExportResult(
       file: samplePdfFile,
@@ -99,11 +100,13 @@ void main() {
     expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
     expect(find.text('Anteprima PDF'), findsOneWidget);
     expect(find.text('test-doc-101.pdf'), findsWidgets);
-    expect(find.byKey(const Key('documents-pdf-preview-close')), findsOneWidget);
+    expect(
+        find.byKey(const Key('documents-pdf-preview-close')), findsOneWidget);
     expect(find.byKey(const Key('documents-pdf-share')), findsOneWidget);
   });
 
-  testWidgets('Tap su "Condividi" apre il canale nativo di share con il file PDF', (
+  testWidgets(
+      'Tap su "Condividi" apre il canale nativo di share con il file PDF', (
     WidgetTester tester,
   ) async {
     final shareCalls = _mockSharePlus(tester);

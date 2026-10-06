@@ -88,8 +88,9 @@ List<WorkOrder> _buildOrders() => <WorkOrder>[
 /// Pumpa la sola tab Documenti con un dataset controllato.
 Future<void> _pumpDocumentsTab(
   WidgetTester tester,
-  List<WorkOrder> orders,
-) async {
+  List<WorkOrder> orders, {
+  BrandProfile brand = BrandProfile.empty,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light,
@@ -97,6 +98,7 @@ Future<void> _pumpDocumentsTab(
         orders: orders,
         clients: const <Client>[],
         catalog: const <CatalogItem>[],
+        brand: brand,
         onSaveOrder: (_) {},
         onDeleteOrder: (_) {},
         onStatusChange: (_, __) {},
@@ -105,6 +107,16 @@ Future<void> _pumpDocumentsTab(
   );
   await tester.pumpAndSettle();
 }
+
+/// Profilo brand di prova: identico a quello salvato dal pannello
+/// Impostazioni.
+const BrandProfile _brandProfile = BrandProfile(
+  fullName: 'Andrea Morgante',
+  role: 'Tecnico Commerciale',
+  phone1: '333 1234567',
+  website: 'www.colormeter.it',
+  emailPrimary: 'info@colormeter.it',
+);
 
 /// Intercetta gli appunti: in flutter_test il canale di piattaforma non ha un
 /// handler di default e `Clipboard.setData` solleverebbe un errore.
@@ -541,6 +553,102 @@ void main() {
       expect(find.textContaining('Cliente:'), findsWidgets);
       expect(find.text('Modifica'), findsOneWidget);
       expect(find.text('Elimina'), findsOneWidget);
+    });
+
+    testWidgets('il dettaglio mostra l\'header brand con i contatti', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(
+        tester,
+        _buildOrders(),
+        brand: _brandProfile,
+      );
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      // Nome e contatti del mittente, nello stesso ordine del PDF.
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('Andrea Morgante'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('Tecnico Commerciale'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('333 1234567'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text('www.colormeter.it'),
+        ),
+        findsOneWidget,
+      );
+      // L'header è il primo blocco visivo del foglio, prima del numero
+      // documento e dei dati del cliente.
+      final sheetTitle = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('ORD-2026-201'),
+      );
+      expect(
+        tester.getTopLeft(header).dy,
+        lessThan(tester.getTopLeft(sheetTitle).dy),
+      );
+      expect(find.textContaining('Cliente:'), findsWidgets);
+    });
+
+    testWidgets('senza profilo l\'header del dettaglio usa il fallback', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.text(BrandProfile.documentHeaderFallback),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('la AppBar Documenti mostra il brand dinamico', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(
+        tester,
+        _buildOrders(),
+        brand: _brandProfile,
+      );
+
+      expect(find.text('Andrea Morgante'), findsOneWidget);
+      expect(find.text('Colormeter'), findsNothing);
     });
 
     testWidgets('il tap sull\'azione primaria apre il dettaglio', (

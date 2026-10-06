@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/documents/document_pdf.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/settings/brand_header.dart';
+import 'package:simple_order_manager/settings/brand_settings_screen.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 import 'package:simple_order_manager/utils/format.dart';
 import 'package:simple_order_manager/version.dart';
@@ -29,6 +31,9 @@ class StorageService {
   static const _keyClients = 'simple_orders_clients_v1';
   static const _keyCatalog = 'simple_orders_catalog_v1';
   static const _keyOrders = 'simple_orders_data_v1';
+
+  /// Profilo del mittente: JSON con logo (solo path) e contatti.
+  static const _keyBrand = 'simple_orders_brand_v1';
 
   static Future<List<Client>> loadClients() async {
     final prefs = await SharedPreferences.getInstance();
@@ -88,6 +93,30 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(orders.map((o) => o.toJson()).toList());
     await prefs.setString(_keyOrders, jsonStr);
+  }
+
+  /// Legge il profilo del mittente.
+  ///
+  /// Diversamente dalle altre liste **non esiste un seed**: un profilo vuoto è
+  /// uno stato valido (l'header ripiega sul testo di fallback). Chiave assente,
+  /// stringa vuota o JSON corrotto ⇒ [BrandProfile.empty], senza eccezioni.
+  static Future<BrandProfile> loadBrand() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyBrand);
+    if (raw == null || raw.isEmpty) return BrandProfile.empty;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return BrandProfile.fromJson(json);
+    } catch (_) {
+      return BrandProfile.empty;
+    }
+  }
+
+  /// Salva il profilo del mittente (i byte del logo restano su disco: qui si
+  /// registra solo il path, vedi `BrandLogoStore`).
+  static Future<void> saveBrand(BrandProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBrand, jsonEncode(profile.toJson()));
   }
 
   static List<Client> _seedClients() {
@@ -256,6 +285,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   List<CatalogItem> _catalog = [];
   List<WorkOrder> _orders = [];
 
+  /// Dati del mittente (logo + contatti) usati dall'header dei documenti.
+  BrandProfile _brand = BrandProfile.empty;
+
   @override
   void initState() {
     super.initState();
@@ -263,15 +295,25 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    final clients = await StorageService.loadClients();
-    final catalog = await StorageService.loadCatalog();
-    final orders = await StorageService.loadOrders();
+    // Le quattro letture sono indipendenti: girano in parallelo così il primo
+    // avvio non somma i tempi delle quattro chiamate.
+    final loaded = await Future.wait(<Future<Object>>[
+      StorageService.loadClients(),
+      StorageService.loadCatalog(),
+      StorageService.loadOrders(),
+      StorageService.loadBrand(),
+    ]);
+    final clients = loaded[0] as List<Client>;
+    final catalog = loaded[1] as List<CatalogItem>;
+    final orders = loaded[2] as List<WorkOrder>;
+    final brand = loaded[3] as BrandProfile;
 
     if (mounted) {
       setState(() {
         _clients = clients;
         _catalog = catalog;
         _orders = orders;
+        _brand = brand;
         _isLoading = false;
       });
     }
@@ -287,6 +329,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
   Future<void> _saveOrders() async {
     await StorageService.saveOrders(_orders);
+  }
+
+  Future<void> _saveBrand() async {
+    await StorageService.saveBrand(_brand);
   }
 
   // --- Client Actions ---
@@ -359,6 +405,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     _saveOrders();
   }
 
+  // --- Brand Actions ---
+  void _updateBrand(BrandProfile brand) {
+    setState(() => _brand = brand);
+    _saveBrand();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -370,6 +422,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         orders: _orders,
         clients: _clients,
         catalog: _catalog,
+        brand: _brand,
         onSaveOrder: _addOrUpdateOrder,
         onDeleteOrder: _deleteOrder,
         onStatusChange: _updateOrderStatus,
@@ -383,6 +436,10 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         catalog: _catalog,
         onSaveItem: _addOrUpdateCatalogItem,
         onDeleteItem: _deleteCatalogItem,
+      ),
+      SettingsTab(
+        brand: _brand,
+        onBrandChange: _updateBrand,
       ),
     ];
 
@@ -407,6 +464,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             selectedIcon: Icon(Icons.inventory_2),
             label: 'Catalogo',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Impostazioni',
+          ),
         ],
       ),
     );
@@ -425,6 +487,15 @@ class OrdersTab extends StatefulWidget {
   final ValueChanged<String> onDeleteOrder;
   final void Function(String orderId, OrderStatus newStatus) onStatusChange;
 
+  /// Profilo del mittente mostrato in AppBar, nel dettaglio e stampato nel PDF.
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza profilo l'app si comporta come prima della feature.
+  final BrandProfile brand;
+
+  /// Callback usato dalla tab Impostazioni per propagare il profile aggiornato.
+  final ValueChanged<BrandProfile> onBrandChange;
+
   const OrdersTab({
     super.key,
     required this.orders,
@@ -433,11 +504,17 @@ class OrdersTab extends StatefulWidget {
     required this.onSaveOrder,
     required this.onDeleteOrder,
     required this.onStatusChange,
+    this.brand = BrandProfile.empty,
+    this.onBrandChange = _noopBrandChange,
   });
 
   @override
   State<OrdersTab> createState() => _OrdersTabState();
 }
+
+/// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
+/// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
+void _noopBrandChange(BrandProfile brand) {}
 
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
@@ -655,6 +732,7 @@ class _OrdersTabState extends State<OrdersTab> {
       final result = await DocumentPdfService.instance.export(
         order,
         client: _clientFor(order),
+        brand: widget.brand,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1072,7 +1150,7 @@ class _OrdersTabState extends State<OrdersTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Colormeter',
+                  widget.brand.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.labelSm.copyWith(
@@ -1866,7 +1944,9 @@ class _OrdersTabState extends State<OrdersTab> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
+        // Il foglio parte più aperto del passato: con l'header brand in alto
+        // numero, cliente, voci e pulsanti restano visibili senza scorrere.
+        initialChildSize: 0.95,
         maxChildSize: 0.95,
         minChildSize: 0.5,
         expand: false,
@@ -1876,6 +1956,13 @@ class _OrdersTabState extends State<OrdersTab> {
             child: ListView(
               controller: scrollController,
               children: [
+                // Header brand: identico al blocco stampato nel PDF, così
+                // anteprima a schermo e stampa coincidono.
+                BrandHeader(
+                  key: const Key('documents-detail-brand-header'),
+                  brand: widget.brand,
+                  dense: true,
+                ),
                 Center(
                   child: Container(
                     width: 40,

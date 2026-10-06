@@ -15,12 +15,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/settings/brand_logo_store.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 import 'package:simple_order_manager/utils/format.dart';
 
@@ -141,9 +143,32 @@ class DocumentPdfService {
     return '${parts.join('-')}.pdf';
   }
 
+  /// Logo stampato a sinistra dell'header: alto 48 pt (circa 17 mm).
+  static const double logoHeight = 48;
+
+  /// I byte del logo sono validi solo se il pacchetto `image` riconosce il
+  /// formato: un file non-immagine (o corrotto) viene ignorato e l'header
+  /// ripiega sul testo, senza far fallire l'esportazione.
+  static Uint8List? _usableLogo(Uint8List? bytes) {
+    if (bytes == null || bytes.isEmpty) return null;
+    try {
+      return img.findDecoderForData(bytes) == null ? null : bytes;
+    } on Object {
+      return null;
+    }
+  }
+
   /// Costruisce il documento senza comprimerlo (`compress: false`), così il
   /// contenuto resta ispezionabile nei test.
-  Future<pw.Document> buildPdf(WorkOrder order, {Client? client}) async {
+  ///
+  /// [brand] è opzionale: senza profilo (o con profilo vuoto) l'header resta
+  /// identico a quello delle versioni precedenti.
+  Future<pw.Document> buildPdf(
+    WorkOrder order, {
+    Client? client,
+    BrandProfile? brand,
+  }) async {
+    final profile = brand ?? BrandProfile.empty;
     final document = pw.Document(
       compress: false,
       title: '${order.docType.label} ${order.orderNumber}',
@@ -151,22 +176,40 @@ class DocumentPdfService {
       subject: '${order.docType.label} per ${order.clientName}',
       creator: 'Simple Order Manager',
     );
+    // Un solo I/O per documento: i byte del logo vengono letti una volta e
+    // riusati da tutte le pagine.
+    final logoBytes = _usableLogo(await BrandLogoStore.instance.read(
+      profile.logoPath,
+    ));
     document.addPage(
-      _buildPage(order,
-          client: client, fallbackFonts: await _loadFallbackFonts()),
+      _buildPage(
+        order,
+        client: client,
+        fallbackFonts: await _loadFallbackFonts(),
+        brand: profile,
+        logoBytes: logoBytes,
+      ),
     );
     return document;
   }
 
   /// Bytes del PDF, pronti per essere scritti su disco o verificati.
-  Future<Uint8List> buildBytes(WorkOrder order, {Client? client}) async {
-    final document = await buildPdf(order, client: client);
+  Future<Uint8List> buildBytes(
+    WorkOrder order, {
+    Client? client,
+    BrandProfile? brand,
+  }) async {
+    final document = await buildPdf(order, client: client, brand: brand);
     return document.save();
   }
 
   /// Genera il PDF e lo scrive nella cartella dei documenti dell'app.
-  Future<PdfExportResult> export(WorkOrder order, {Client? client}) async {
-    final bytes = await buildBytes(order, client: client);
+  Future<PdfExportResult> export(
+    WorkOrder order, {
+    Client? client,
+    BrandProfile? brand,
+  }) async {
+    final bytes = await buildBytes(order, client: client, brand: brand);
     final directory = await _resolveDirectory();
     if (!await directory.exists()) {
       await directory.create(recursive: true);
@@ -261,6 +304,8 @@ class DocumentPdfService {
     WorkOrder order, {
     Client? client,
     List<pw.Font> fallbackFonts = const <pw.Font>[],
+    BrandProfile brand = BrandProfile.empty,
+    Uint8List? logoBytes,
   }) {
     final theme = pw.ThemeData.withFont(
       base: pw.Font.helvetica(),
@@ -275,7 +320,7 @@ class DocumentPdfService {
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 52),
       theme: theme,
       build: (context) => <pw.Widget>[
-        _header(order),
+        _header(order, brand: brand, logoBytes: logoBytes),
         pw.SizedBox(height: 20),
         _clientCard(order, client),
         pw.SizedBox(height: 20),
@@ -299,12 +344,22 @@ class DocumentPdfService {
           ),
         ),
       ],
-      footer: (context) => _footer(context.pageNumber, context.pagesCount),
+      footer: (context) =>
+          _footer(context.pageNumber, context.pagesCount, brand: brand),
     );
   }
 
-  static pw.Widget _header(WorkOrder order) {
-    final status = order.status;
+  /// Testo mostrato al posto del logo quando il mittente non ne ha caricato
+  /// uno: coincide con l'intestazione delle versioni precedenti.
+  static const String _fallbackBrandLabel = BrandProfile.documentHeaderFallback;
+
+  /// Intestazione a due righe: riga 1 logo + blocco contatti, riga 2 metadati
+  /// del documento. Il bordo inferiore [AppColors.primary] resta invariato.
+  static pw.Widget _header(
+    WorkOrder order, {
+    BrandProfile brand = BrandProfile.empty,
+    Uint8List? logoBytes,
+  }) {
     return pw.Container(
       padding: const pw.EdgeInsets.only(bottom: 14),
       decoration: pw.BoxDecoration(
@@ -312,57 +367,111 @@ class DocumentPdfService {
           bottom: pw.BorderSide(color: _pdf(AppColors.primary), width: 1.5),
         ),
       ),
-      child: pw.Row(
+      child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: <pw.Widget>[
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: <pw.Widget>[
-                pw.Text(
-                  'Simple Order Manager',
-                  style: _style(
-                      size: 18, bold: true, color: _pdf(AppColors.primary)),
-                ),
-                pw.SizedBox(height: 6),
-                pw.Text(
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: <pw.Widget>[
+              pw.Expanded(child: _brandMark(logoBytes)),
+              if (brand.pdfHeaderLines.isNotEmpty) ...<pw.Widget>[
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: _brandContacts(brand)),
+              ],
+            ],
+          ),
+          pw.SizedBox(height: 10),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: <pw.Widget>[
+              pw.Expanded(
+                child: pw.Text(
                   order.docType.label.toUpperCase(),
                   style: _label(color: _pdf(AppColors.onSurfaceVariant)),
                 ),
-              ],
-            ),
-          ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: <pw.Widget>[
-              pw.Text(order.orderNumber, style: _style(size: 16, bold: true)),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                formatItalianDate(order.date),
-                style: _style(size: 9, color: _pdf(AppColors.onSurfaceVariant)),
               ),
-              pw.SizedBox(height: 8),
-              pw.Container(
-                padding:
-                    const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: pw.BoxDecoration(
-                  color: _pdf(status.pillBackground),
-                  borderRadius: pw.BorderRadius.circular(AppRadii.full),
-                ),
-                child: pw.Text(
-                  status.label,
-                  style: _style(
-                    size: 8,
-                    bold: true,
-                    color: _pdf(status.pillForeground),
-                  ),
-                ),
-              ),
+              pw.SizedBox(width: 12),
+              _documentMeta(order),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  /// Marchio: immagine del logo, oppure etichetta di fallback dell'app
+  /// (il nome del mittente va nell blocco contatti a destra).
+  static pw.Widget _brandMark(Uint8List? logoBytes) {
+    if (logoBytes != null) {
+      return pw.Image(
+        pw.MemoryImage(logoBytes),
+        height: logoHeight,
+        fit: pw.BoxFit.contain,
+        alignment: pw.Alignment.centerLeft,
+      );
+    }
+    return pw.Text(
+      _fallbackBrandLabel,
+      style: _style(size: 18, bold: true, color: _pdf(AppColors.primary)),
+    );
+  }
+
+  /// Nome in grassetto + righe di contatto allineate a destra.
+  static pw.Widget _brandContacts(BrandProfile brand) {
+    final lines = brand.pdfHeaderLines;
+    final hasName = brand.fullName.trim().isNotEmpty;
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: <pw.Widget>[
+        for (var i = 0; i < lines.length; i++) ...<pw.Widget>[
+          if (i > 0) pw.SizedBox(height: 2),
+          pw.Text(
+            lines[i],
+            textAlign: pw.TextAlign.right,
+            style: _style(
+              size: i == 0 && hasName ? 12 : 8.5,
+              bold: i == 0 && hasName,
+              color: i == 0 && hasName
+                  ? _pdf(AppColors.onSurface)
+                  : _pdf(AppColors.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Numero documento, data e pill di stato (seconda riga dell'header).
+  static pw.Widget _documentMeta(WorkOrder order) {
+    final status = order.status;
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: <pw.Widget>[
+        pw.Text(order.orderNumber, style: _style(size: 16, bold: true)),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          formatItalianDate(order.date),
+          style: _style(size: 9, color: _pdf(AppColors.onSurfaceVariant)),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: pw.BoxDecoration(
+            color: _pdf(status.pillBackground),
+            borderRadius: pw.BorderRadius.circular(AppRadii.full),
+          ),
+          child: pw.Text(
+            status.label,
+            style: _style(
+              size: 8,
+              bold: true,
+              color: _pdf(status.pillForeground),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -563,8 +672,16 @@ class DocumentPdfService {
     );
   }
 
-  static pw.Widget _footer(int pageNumber, int pagesCount) {
+  static pw.Widget _footer(
+    int pageNumber,
+    int pagesCount, {
+    BrandProfile brand = BrandProfile.empty,
+  }) {
     final style = _style(size: 7.5, color: _pdf(AppColors.onSurfaceVariant));
+    // La firma riprende il mittente salvato: header e footer non si contraddicono.
+    final signature = brand.fullName.trim().isEmpty
+        ? _fallbackBrandLabel
+        : brand.fullName.trim();
     return pw.Container(
       padding: const pw.EdgeInsets.only(top: 8),
       decoration: pw.BoxDecoration(
@@ -576,7 +693,7 @@ class DocumentPdfService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: <pw.Widget>[
           pw.Text(
-            'Simple Order Manager · generato il ${formatItalianDate(DateTime.now())}',
+            '$signature · generato il ${formatItalianDate(DateTime.now())}',
             style: style,
           ),
           pw.Text('Pagina $pageNumber di $pagesCount', style: style),
