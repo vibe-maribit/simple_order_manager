@@ -441,7 +441,13 @@ jobs:
 
           MERGED=$(echo "$MERGE_RESP" | jq -r '.merged // false')
           if [ "$MERGED" = "true" ]; then
-            echo "✅ PR #$PR_NUMBER mergiata in main → build-apk.yml si attiverà automaticamente."
+            echo "✅ PR #$PR_NUMBER mergiata in main."
+            echo "🚀 Avvio esplicito di build-apk.yml per compilare la release APK..."
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$API/actions/workflows/build-apk.yml/dispatches" \
+              -d '{"ref":"main"}' || true
           else
             echo "⚠️ Merge automatico non riuscito: la PR #$PR_NUMBER resta aperta per risoluzione/revisione manuale."
             echo "$MERGE_RESP"
