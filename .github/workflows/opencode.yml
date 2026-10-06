@@ -28,7 +28,7 @@ jobs:
         github.event.comment.user.login != 'github-actions[bot]' &&
         (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')))
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
 
     env:
       GH_API: "https://api.github.com"
@@ -45,6 +45,11 @@ jobs:
       ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_BODY: ${{ github.event.issue.body }}
       RUN_NUMBER: ${{ github.run_number }}
+      # Chiavi API per provider a pagamento (se configurate nei Secrets, altrimenti fallback gratuito)
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       # Modello configurabile:
       # 1. Flag per-run nel commento/issue (es. '--model space-bunny-free' o '--model opencode/big-pickle')
       # 2. Modello visual se l'issue contiene immagini (default space-bunny-free, configurabile via vars.OPENCODE_VISUAL_MODEL)
@@ -537,7 +542,38 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"body\":$BODY}" > /dev/null
 
-      # ── 11. Reazioni finali ──────────────────────────────────────────────────
+      # ── 11. Salvataggio di emergenza su timeout / cancellazione ───────────────
+      - name: Salvataggio progressi su timeout o cancellazione
+        if: cancelled()
+        continue-on-error: true
+        run: |
+          API="$GH_API/repos/$REPO"
+          BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
+          echo "⚠️ Job interrotto o timeout raggiunto: salvataggio di emergenza delle modifiche su $BRANCH_NAME..."
+          git status
+          git add .
+          git commit -m "OpenCode ($CHOSEN_MODEL): checkpoint emergenza (timeout/cancellazione)" || true
+          git push origin "$BRANCH_NAME" || true
+
+          # Commenta sull'issue avvisando che la run ha raggiunto il limite di tempo e il lavoro può essere ripreso
+          TARGET_ISSUE="$ISSUE_NUMBER"
+          [ -z "$TARGET_ISSUE" ] && TARGET_ISSUE="${{ steps.ctx.outputs.pr_number }}"
+          if [ -n "$TARGET_ISSUE" ]; then
+            MSG="⏱️ **Attenzione**: la sessione di lavoro ha raggiunto il limite di tempo o è stata interrotta.
+
+Le modifiche prodotte finora sono state salvate e pushate sul branch \`$BRANCH_NAME\`.
+Il lavoro può essere completato e ripreso avviando una nuova run con:
+\`/oc riprendi e completa il lavoro sul branch $BRANCH_NAME\`"
+            JSON_BODY=$(jq -n --arg b "$MSG" '{"body": $b}')
+            curl -s -X POST "$API/issues/$TARGET_ISSUE/comments" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              -d "$JSON_BODY" > /dev/null || true
+          fi
+
+      # ── 12. Reazioni finali ──────────────────────────────────────────────────
       - name: Reazione finale 🚀
         if: success() && steps.react.outputs.path != ''
         continue-on-error: true

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -158,6 +159,25 @@ List<MethodCall> _mockSharePlus(WidgetTester tester) {
   return calls;
 }
 
+/// Intercetta il canale nativo di `printing` dichiarando che la
+/// rasterizzazione non è disponibile: l'anteprima mostra il proprio
+/// fallback senza avviare I/O reali sul file.
+void _mockPrinting(WidgetTester tester) {
+  const channel = MethodChannel('net.nfet.printing');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (call) async => call.method == 'printingInfo'
+        ? <String, dynamic>{'canRaster': false}
+        : null,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
+}
+
 /// Lascia completare l'I/O reale su disco (esportazione PDF) e fa avanzare la
 /// UI fino a quando non ci sono più animazioni in coda.
 Future<void> _settleExport(WidgetTester tester) async {
@@ -169,10 +189,23 @@ Future<void> _settleExport(WidgetTester tester) async {
     // copiato") devono scadere prima che quello del PDF sia visibile.
     await tester.pump(const Duration(milliseconds: 400));
     final done = tester.any(find.textContaining('PDF generato')) ||
-        tester.any(find.textContaining('Generazione PDF non riuscita')) ||
-        tester.any(find.textContaining('condivisione non disponibile'));
+        tester.any(find.textContaining('Generazione PDF non riuscita'));
     if (done) break;
   }
+  // Il raster di `PdfPreview` è debounced a 300 ms: fa avanzare il tempo
+  // finto prima del settle definitivo, così il fallback dell'anteprima ha
+  // il tempo di rendersi.
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pumpAndSettle();
+}
+
+/// Chiude la schermata di anteprima PDF e torna alla lista documenti.
+Future<void> _closePreview(WidgetTester tester) async {
+  // Lo snackbar "PDF generato" copre la barra azioni in basso: si attende la
+  // sua scadenza prima di interagire con "Chiudi".
+  await tester.pump(const Duration(seconds: 4));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('documents-pdf-preview-close')));
   await tester.pumpAndSettle();
 }
 
@@ -528,10 +561,11 @@ void main() {
   });
 
   group('Azioni secondarie → PDF', () {
-    testWidgets('"Condividi PDF" genera il PDF reale e lo condivide', (
+    testWidgets('"Condividi PDF" genera il PDF reale e ne apre l\'anteprima', (
       WidgetTester tester,
     ) async {
       final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-ord-1');
       await tester.pumpAndSettle();
@@ -542,6 +576,11 @@ void main() {
       );
       await _settleExport(tester);
 
+      // La schermata di anteprima renderizza il file appena scritto.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('ord-2026-201-cliente-gamma.pdf'), findsOneWidget);
+
       // Snackbar di conferma con nome file e dimensione.
       expect(
         find.textContaining(
@@ -549,6 +588,10 @@ void main() {
         ),
         findsOneWidget,
       );
+
+      // Il tap su "Condividi" apre il foglio nativo con il file.
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
 
       // La condivisione nativa riceve il file appena scritto.
       expect(shareCalls, hasLength(1));
@@ -572,12 +615,15 @@ void main() {
       expect(content, contains('Gamma'));
       expect(content, contains('Subtotale'));
       expect(content, contains('Totale'));
+
+      await _closePreview(tester);
     });
 
     testWidgets('il dettaglio espone "Genera PDF e condividi"', (
       WidgetTester tester,
     ) async {
       final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-prev-1');
       await tester.pumpAndSettle();
@@ -591,11 +637,20 @@ void main() {
       await tester.tap(find.byKey(const Key('documents-detail-export-pdf')));
       await _settleExport(tester);
 
+      // Stesso flusso della card: generazione → anteprima.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('prev-2026-101-cliente-alfa.pdf'), findsOneWidget);
       expect(
         find.textContaining('PDF generato: prev-2026-101-cliente-alfa.pdf'),
         findsOneWidget,
       );
+
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
       expect(shareCalls, hasLength(1));
+
+      await _closePreview(tester);
     });
 
     testWidgets('lo sheet "Invia per firma" espone "Genera PDF e condividi"', (
@@ -603,6 +658,7 @@ void main() {
     ) async {
       _mockClipboard(tester);
       final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-ord-2');
       await tester.pumpAndSettle();
@@ -620,11 +676,20 @@ void main() {
       await tester.tap(find.byKey(const Key('documents-sign-export-pdf')));
       await _settleExport(tester);
 
+      // Stesso flusso della card: generazione → anteprima.
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(find.text('ord-2026-202-cliente-delta.pdf'), findsOneWidget);
       expect(
         find.textContaining('PDF generato: ord-2026-202-cliente-delta.pdf'),
         findsOneWidget,
       );
+
+      await tester.tap(find.byKey(const Key('documents-pdf-share')));
+      await tester.pumpAndSettle();
       expect(shareCalls, hasLength(1));
+
+      await _closePreview(tester);
     });
   });
 

@@ -12,6 +12,22 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.4.0] - 2026-10-06
+
+### Added
+
+- `lib/documents/pdf_preview_screen.dart`: schermata di **anteprima PDF reale** basata su `package:printing` (`PdfPreview`):
+  - visualizzazione a schermo del documento PDF renderizzato prima della condivisione;
+  - pulsante esplicito "Condividi" per aprire il foglio nativo con MIME `application/pdf`;
+  - pulsante "Chiudi" per tornare alla lista dei documenti;
+  - fallback esplicito (`documents-pdf-preview-error`) con condivisione mantenuta attiva se il rendering su schermo fallisce.
+- Test dedicati all'anteprima PDF in `test/pdf_preview_test.dart`.
+
+### Changed
+
+- `lib/main.dart`: il flusso di esportazione PDF apre l'anteprima a schermo dopo la generazione, invece di innescare subito la condivisione a scatola chiusa.
+- Dipendenza `printing: ^5.14.3` aggiunta in `pubspec.yaml`.
+
 ## [1.3.0] - 2026-10-06
 
 ### Added

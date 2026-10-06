@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:simple_order_manager/documents/document_pdf.dart';
+import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 import 'package:simple_order_manager/utils/format.dart';
@@ -642,10 +643,11 @@ class _OrdersTabState extends State<OrdersTab> {
   }
 
   /// Genera il PDF reale del documento, lo salva nella cartella dei documenti
-  /// dell'app e ne apre la condivisione nativa.
+  /// dell'app e ne apre la schermata di anteprima.
   ///
   /// Usata dall'azione "Condividi PDF" delle card, dal dettaglio del
-  /// documento e dal flusso "Invia per firma".
+  /// documento e dal flusso "Invia per firma". La condivisione è un'azione
+  /// esplicita all'interno dell'anteprima.
   Future<void> _exportDocumentPdf(WorkOrder order) async {
     if (_pdfExportRunning) return;
     _pdfExportRunning = true;
@@ -664,20 +666,14 @@ class _OrdersTabState extends State<OrdersTab> {
           duration: const Duration(seconds: 3),
         ),
       );
-      final shared = await DocumentPdfService.instance.share(
-        result,
-        title: '${order.docType.label} ${order.orderNumber}',
-        subject:
-            '${order.docType.label} ${order.orderNumber} · ${order.clientName}',
-      );
-      if (!mounted || shared) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          key: Key('documents-pdf-share-snackbar'),
-          content: Text(
-            'PDF salvato: condivisione non disponibile su questo dispositivo',
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => DocumentPdfPreviewScreen(
+            result: result,
+            title: '${order.docType.label} ${order.orderNumber}',
+            subject:
+                '${order.docType.label} ${order.orderNumber} · ${order.clientName}',
           ),
-          duration: Duration(seconds: 3),
         ),
       );
     } catch (error) {
