@@ -45,8 +45,13 @@ jobs:
       ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_BODY: ${{ github.event.issue.body }}
       RUN_NUMBER: ${{ github.run_number }}
-      # OpenCode: nessun API key necessario per i modelli gratuiti Zen
-      OPENCODE_MODEL: opencode/big-pickle
+      # Modello configurabile:
+      # 1. Flag per-run nel commento/issue (es. '--model space-bunny-free' o '--model opencode/big-pickle')
+      # 2. Modello visual se l'issue contiene immagini (default space-bunny-free, configurabile via vars.OPENCODE_VISUAL_MODEL)
+      # 3. Variabile di repository/progetto vars.OPENCODE_DEFAULT_MODEL
+      # 4. Fallback definitivo: opencode/big-pickle
+      DEFAULT_MODEL: ${{ vars.OPENCODE_DEFAULT_MODEL || 'opencode/big-pickle' }}
+      VISUAL_MODEL: ${{ vars.OPENCODE_VISUAL_MODEL || 'space-bunny-free' }}
       MAX_ITERATIONS: "4"
 
     steps:
@@ -209,11 +214,58 @@ jobs:
         run: |
           printf '%s' "$COMMENT_BODY" | sed -e 's|/opencode||g' -e 's|/oc||g' > /tmp/clean_prompt.txt
 
+      - name: Risolvi modello (specifico per run / immagini / fallback)
+        id: model
+        run: |
+          PROMPT_TEXT=$(cat /tmp/clean_prompt.txt)
+          FULL_TEXT="$COMMENT_BODY $ISSUE_BODY $ISSUE_TITLE"
+
+          # 1. Controllo se nel comando c'è una specifica di modello per questa run
+          # Supporta: --model <nome>, -m <nome>, model:<nome>, model=<nome>
+          RUN_MODEL=""
+          if [[ "$PROMPT_TEXT" =~ (--model|-m|model:)[[:space:]=]*([a-zA-Z0-9_\.\/-]+) ]]; then
+            RUN_MODEL="${BASH_REMATCH[2]}"
+            echo "🎯 Modello specificato dall'utente per questa run: $RUN_MODEL"
+            # Rimuove il flag del modello dal clean_prompt per non inquinare il prompt
+            PROMPT_TEXT=$(echo "$PROMPT_TEXT" | sed -E 's/(--model|-m|model:)[[:space:]=]*[a-zA-Z0-9_\.\/-]+//g')
+            echo "$PROMPT_TEXT" > /tmp/clean_prompt.txt
+          fi
+
+          # 2. Rilevamento immagini nell'issue / commento (markdown ![], tag <img>, o link ad immagini github user-attachments)
+          HAS_IMAGES=false
+          if echo "$FULL_TEXT" | grep -Eq '(!\[[^]]*\]\([^)]+\)|<img[[:space:]]|github\.com\/user-attachments\/assets|\.(png|jpe?g|gif|webp|bmp))'; then
+            HAS_IMAGES=true
+            echo "🖼️ Immagini rilevate nel testo dell'issue o del commento!"
+          fi
+
+          # 3. Risoluzione modello finale
+          FINAL_MODEL=""
+          if [ -n "$RUN_MODEL" ]; then
+            FINAL_MODEL="$RUN_MODEL"
+          elif [ "$HAS_IMAGES" = "true" ]; then
+            FINAL_MODEL="$VISUAL_MODEL"
+            echo "👁️ Utilizzo modello visual ($FINAL_MODEL) per elaborare le immagini."
+          else
+            FINAL_MODEL="$DEFAULT_MODEL"
+            echo "⚙️ Utilizzo modello di default configurato ($FINAL_MODEL)."
+          fi
+
+          # Fallback di sicurezza: se per qualunque motivo è vuoto
+          [ -z "$FINAL_MODEL" ] && FINAL_MODEL="opencode/big-pickle"
+
+          echo "selected_model=$FINAL_MODEL" >> "$GITHUB_OUTPUT"
+          echo "has_images=$HAS_IMAGES" >> "$GITHUB_OUTPUT"
+          echo "### Configurazione Modello per questa run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Modello attivo**: \`$FINAL_MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Immagini rilevate**: \`$HAS_IMAGES\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Default progetto**: \`$DEFAULT_MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 6. Fase 1: PLAN ─────────────────────────────────────────────────────
       - name: "Fase 1 — Plan (analisi read-only)"
         if: steps.ctx.outputs.is_pr != 'true'
         run: |
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
           mkdir -p issue_plans
           PLAN_FILE="issue_plans/${{ steps.ctx.outputs.plan_key }}.md"
 
@@ -224,7 +276,7 @@ jobs:
             CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
             CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
 
-            opencode run --agent plan --model "$OPENCODE_MODEL" \
+            opencode run --agent plan --model "$CHOSEN_MODEL" \
               "Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
             Analizza il codebase e la richiesta, poi produci un piano di lavoro in Markdown
             con questa struttura ESATTA:
@@ -257,6 +309,7 @@ jobs:
         id: build_review
         run: |
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
           CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
           CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
           PLAN=""; [ -f /tmp/plan.md ] && PLAN="$(cat /tmp/plan.md)"
@@ -264,8 +317,8 @@ jobs:
           VERDICT="FAIL"
 
           for i in $(seq 1 "$MAX_ITERATIONS"); do
-            echo "::group::Iterazione $i — BUILD"
-            opencode run --agent build --auto --model "$OPENCODE_MODEL" \
+            echo "::group::Iterazione $i — BUILD ($CHOSEN_MODEL)"
+            opencode run --agent build --auto --model "$CHOSEN_MODEL" \
               "Sei in modalità BUILD. Implementa il piano completando TUTTI i task e
             soddisfacendo TUTTI gli Acceptance Criteria. Applica le modifiche ai file.
 
@@ -281,11 +334,11 @@ jobs:
 
             # Checkpoint: commit e push immediato sul branch remoto dopo la build
             git add .
-            git commit -m "OpenCode (big-pickle): build progress (iterazione $i)" || true
+            git commit -m "OpenCode ($CHOSEN_MODEL): build progress (iterazione $i)" || true
             git push origin "$BRANCH_NAME" || true
 
-            echo "::group::Iterazione $i — REVIEW"
-            opencode run --agent reviewer --auto --model "$OPENCODE_MODEL" \
+            echo "::group::Iterazione $i — REVIEW ($CHOSEN_MODEL)"
+            opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" \
               "Verifica sul codice ATTUALE se OGNI Acceptance Criterion del piano è
             soddisfatto. Puoi eseguire build/lint/test ma NON modificare i file.
 
@@ -318,9 +371,10 @@ jobs:
         run: |
           API="$GH_API/repos/$REPO"
           BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
+          CHOSEN_MODEL="${{ steps.model.outputs.selected_model }}"
 
           git add .
-          git commit -m "OpenCode (big-pickle): $BRANCH_NAME" || echo "Niente di nuovo."
+          git commit -m "OpenCode ($CHOSEN_MODEL): $BRANCH_NAME" || echo "Niente di nuovo."
 
           # 1. Fetch dello stato più recente di origin/main
           echo "🔄 Fetching stato più aggiornato di origin/main..."
@@ -335,7 +389,7 @@ jobs:
             CONFLICTING_FILES=$(git diff --name-only --diff-filter=U)
             echo "File in conflitto: $CONFLICTING_FILES"
 
-            opencode run --agent build --auto --model "$OPENCODE_MODEL" \
+            opencode run --agent build --auto --model "$CHOSEN_MODEL" \
               "Ci sono conflitti di merge Git tra questo branch e il branch principale 'main'.
             File in conflitto:
             $CONFLICTING_FILES
@@ -382,8 +436,8 @@ jobs:
               -d "{
                 \"base\": \"main\",
                 \"head\": \"$BRANCH_NAME\",
-                \"title\": \"🤖 OpenCode: $BRANCH_NAME\",
-                \"body\": \"Generata automaticamente da OpenCode (big-pickle) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nCloses #$ISSUE_NUMBER\"
+                \"title\": \"🤖 OpenCode ($CHOSEN_MODEL): $BRANCH_NAME\",
+                \"body\": \"Generata automaticamente da OpenCode ($CHOSEN_MODEL) su richiesta di @$COMMENT_AUTHOR.\n\nPiano: \`issue_plans/${{ steps.ctx.outputs.plan_key }}.md\`\n\nCloses #$ISSUE_NUMBER\"
               }")
             PR_NUMBER=$(echo "$RESP" | jq -r '.number // empty')
             # Se la PR esiste già (branch già pushato in precedenza)
