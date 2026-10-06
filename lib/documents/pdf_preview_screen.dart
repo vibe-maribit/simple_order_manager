@@ -50,6 +50,14 @@ class DocumentPdfPreviewScreen extends StatefulWidget {
 class _DocumentPdfPreviewScreenState extends State<DocumentPdfPreviewScreen> {
   bool _previewFailed = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.result.file.existsSync()) {
+      _previewFailed = true;
+    }
+  }
+
   /// Callback di lettura del file PDF, mantenuto stabile per evitare
   /// rilanci multipli della rasterizzazione in `didUpdateWidget`.
   late final LayoutCallback _readPdfBytes =
@@ -131,6 +139,9 @@ class _DocumentPdfPreviewScreenState extends State<DocumentPdfPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final fileMissing = !widget.result.file.existsSync();
+    final hasFailed = _previewFailed || fileMissing;
+
     return Scaffold(
       key: const Key('documents-pdf-preview'),
       appBar: AppBar(
@@ -150,17 +161,19 @@ class _DocumentPdfPreviewScreenState extends State<DocumentPdfPreviewScreen> {
       body: Column(
         children: <Widget>[
           Expanded(
-            child: PdfPreview(
-              build: _readPdfBytes,
-              pdfFileName: widget.result.fileName,
-              allowPrinting: false,
-              allowSharing: false,
-              useActions: false,
-              canChangePageFormat: false,
-              canChangeOrientation: false,
-              dynamicLayout: false,
-              onError: _buildPreviewError,
-            ),
+            child: hasFailed
+                ? _buildPreviewError(context, 'File non disponibile')
+                : PdfPreview(
+                    build: _readPdfBytes,
+                    pdfFileName: widget.result.fileName,
+                    allowPrinting: false,
+                    allowSharing: false,
+                    useActions: false,
+                    canChangePageFormat: false,
+                    canChangeOrientation: false,
+                    dynamicLayout: false,
+                    onError: _buildPreviewError,
+                  ),
           ),
           SafeArea(
             top: false,
@@ -184,7 +197,7 @@ class _DocumentPdfPreviewScreenState extends State<DocumentPdfPreviewScreen> {
                       label: const Text('Chiudi'),
                     ),
                   ),
-                  if (!_previewFailed) ...<Widget>[
+                  if (!hasFailed) ...<Widget>[
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton.icon(
