@@ -213,40 +213,50 @@ jobs:
       - name: "Fase 1 — Plan (analisi read-only)"
         if: steps.ctx.outputs.is_pr != 'true'
         run: |
-          CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
-          CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
+          BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
           mkdir -p issue_plans
           PLAN_FILE="issue_plans/${{ steps.ctx.outputs.plan_key }}.md"
 
-          opencode run --agent plan --model "$OPENCODE_MODEL" \
-            "Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
-          Analizza il codebase e la richiesta, poi produci un piano di lavoro in Markdown
-          con questa struttura ESATTA:
+          if [ -s "$PLAN_FILE" ]; then
+            echo "📋 Piano esistente trovato in $PLAN_FILE: riutilizzo il piano."
+            cp "$PLAN_FILE" /tmp/plan.md
+          else
+            CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
+            CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
 
-          # Piano
-          ## Obiettivo
-          ## Task
-          (elenco numerato di task atomici; per ciascuno i file coinvolti)
-          ## Acceptance Criteria
-          (checklist '- [ ] ...' di criteri oggettivi e verificabili)
-          ## Verifica
-          (come testare: comandi da lanciare, cosa controllare)
+            opencode run --agent plan --model "$OPENCODE_MODEL" \
+              "Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
+            Analizza il codebase e la richiesta, poi produci un piano di lavoro in Markdown
+            con questa struttura ESATTA:
 
-          Richiesta ($COMMENT_AUTHOR): $CLEAN_PROMPT
-          Contesto: $ISSUE_TITLE - $ISSUE_BODY
-          $CONTEXT
+            # Piano
+            ## Obiettivo
+            ## Task
+            (elenco numerato di task atomici; per ciascuno i file coinvolti)
+            ## Acceptance Criteria
+            (checklist '- [ ] ...' di criteri oggettivi e verificabili)
+            ## Verifica
+            (come testare: comandi da lanciare, cosa controllare)
 
-          Restituisci SOLO il documento Markdown del piano." | tee "$PLAN_FILE"
+            Richiesta ($COMMENT_AUTHOR): $CLEAN_PROMPT
+            Contesto: $ISSUE_TITLE - $ISSUE_BODY
+            $CONTEXT
 
-          cp "$PLAN_FILE" /tmp/plan.md
-          git add "$PLAN_FILE"
-          git commit -m "OpenCode: piano di lavoro (${{ steps.ctx.outputs.plan_key }})" \
-            || echo "Nessun piano da committare."
+            Restituisci SOLO il documento Markdown del piano." | tee "$PLAN_FILE"
+
+            cp "$PLAN_FILE" /tmp/plan.md
+            git add "$PLAN_FILE"
+            git commit -m "OpenCode: piano di lavoro (${{ steps.ctx.outputs.plan_key }})" \
+              || echo "Nessun piano da committare."
+            # Push immediato del piano sul feature branch remoto per checkpoint
+            git push origin "$BRANCH_NAME" || true
+          fi
 
       # ── 7. Fase 2: BUILD + REVIEW loop ──────────────────────────────────────
       - name: "Fase 2 — Build & Review loop"
         id: build_review
         run: |
+          BRANCH_NAME="${{ steps.ctx.outputs.branch_name }}"
           CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
           CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
           PLAN=""; [ -f /tmp/plan.md ] && PLAN="$(cat /tmp/plan.md)"
@@ -268,6 +278,11 @@ jobs:
             === FEEDBACK REVIEW PRECEDENTE ===
             $REVIEW_FEEDBACK"
             echo "::endgroup::"
+
+            # Checkpoint: commit e push immediato sul branch remoto dopo la build
+            git add .
+            git commit -m "OpenCode (big-pickle): build progress (iterazione $i)" || true
+            git push origin "$BRANCH_NAME" || true
 
             echo "::group::Iterazione $i — REVIEW"
             opencode run --agent reviewer --auto --model "$OPENCODE_MODEL" \
