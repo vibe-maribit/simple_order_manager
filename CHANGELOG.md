@@ -12,6 +12,43 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.5.1] - 2026-10-06
+
+### Changed
+
+- **Logo del mittente +50%** nell'intestazione, senza alterare gli altri elementi
+  dell'header (nome e contatti, riga tipo/numero/data/pill di stato, bordo inferiore
+  `AppColors.primary` 1.5, spaziature):
+  - `lib/documents/document_pdf.dart`: `DocumentPdfService.logoHeight` passa da **48 a 72 pt**
+    (circa 17 → 25,4 mm). La proporzione nativa resta garantita da `pw.BoxFit.contain` +
+    `pw.Alignment.centerLeft` nel `pw.Expanded` di metà colonna: larghezza e altezza non
+    vengono mai fissate indipendentemente, quindi nessun logo viene distorto o stirato.
+    Limite noto (invariato rispetto alla versione precedente): nell'area di mezza colonna
+    (~257 pt su A4 con margini di 36 pt) un logo con rapporto oltre ~3.5:1 viene ridotto per
+    contenimento e reso leggermente più basso.
+  - `lib/settings/brand_header.dart`: l'area riservata al logo passa da `112×56` a **`168×84`**
+    (anteprima live in Impostazioni, non `dense`) e da `88×44` a **`132×66`** (variante `dense`,
+    usata dal bottom sheet di dettaglio). Rapporto 2:1 invariato e resa sempre contenente:
+    un logo quadrato occupa 84×84 / 66×66, un logo 4:1 occupa 132×33 nella variante `dense`.
+    Il file sorgente non viene ingrandito: `BrandLogoStore.normalize()` lo normalizza a lato
+    massimo 1024 px (≥ 3× i pixel fisici necessari a 84 px logici su dpr 3), quindi nessuno
+    sgranamento.
+  - Il fallback testuale resta invariato: marchio `Simple Order Manager` a 18 pt nel PDF e
+    `AppTextStyles.headlineSm` a schermo.
+- Test:
+  - `test/document_pdf_test.dart`: verifica sul content stream non compresso la matrice di
+    placement `q 144 0 0 72` per un logo 2:1 e `q 72 0 0 72` per un logo 1:1 (proporzioni
+    preservate, nessuno stiramento), l'assenza delle vecchie dimensioni (`q 96 0 0 48`) e
+    l'assenza di ricampionamento (l'XObject immagine conserva i pixel del file su disco).
+  - `test/brand_settings_test.dart`: nuovo gruppo `BrandHeader → area riservata al logo` che
+    misura le dimensioni effettive per `dense` e per la versione completa con logo 2:1,
+    quadrato e panoramico, più il caso "nessun overflow con logo e contatti lunghi" a 320 px
+    (280 px utili nel foglio di dettaglio); il caso a 360×640 ora carica un logo reale invece
+    del solo testo di fallback. La cache globale di `PaintingBinding` viene azzerata tra i
+    test, perché i loghi condividono lo stesso path su disco.
+  - `test/documents_ui_test.dart`: il bottom sheet di dettaglio a 360×640 con logo reale
+    verifica l'area `132×66` e che logo e blocco contatti non si sovrappongano.
+
 ## [1.5.0] - 2026-10-06
 
 ### Added

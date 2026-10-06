@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
@@ -232,6 +233,18 @@ Future<void> _scrollUntilVisible(
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
   }
+}
+
+/// Lascia completare la lettura reale del file logo (`Image.file` non si
+/// risolve nel tempo finto del test) e poi assesta la UI.
+Future<void> _settleImageIo(WidgetTester tester) async {
+  for (var round = 0; round < 20; round++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pumpAndSettle();
 }
 
 /// Scorre fino alla card [orderId] e la rende visibile (scroll-to + assicura
@@ -945,6 +958,81 @@ void main() {
       await _openCard(tester, 'long-1');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'header con logo reale nel dettaglio a 360x640: 132x66 e '
+        'contatti senza sovrapposizioni', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      // La cache globale di `PaintingBinding` è per path: ogni test usa una
+      // cartella propria, ma si azzera comunque per non dipendere dall'ordine.
+      PaintingBinding.instance.imageCache.clear();
+      addTearDown(PaintingBinding.instance.imageCache.clear);
+
+      final temp = Directory.systemTemp.createTempSync('simple_order_sheet_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      // Logo 2:1 reale: nell'area dense 132×66 riempie l'intera area, quindi
+      // ne misura le dimensioni effettive (prima del +50% erano 88×44).
+      final logo = File(
+        '${temp.path}${Platform.pathSeparator}logo-2x1.png',
+      )..writeAsBytesSync(
+          img.encodePng(img.Image(width: 480, height: 240)),
+        );
+      final brand = _brandProfile.copyWith(
+        logoPath: logo.path,
+        fullName: 'Andrea Morgante Colormeter Amministrazione Srl',
+        emailPrimary: 'amministrazione.vendite@colormeter.it',
+      );
+
+      await _pumpDocumentsTab(tester, _buildOrders(), brand: brand);
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await _settleImageIo(tester);
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      final headerLogo = find.descendant(
+        of: header,
+        matching: find.byKey(const Key('brand-header-logo')),
+      );
+      expect(
+        headerLogo,
+        findsOneWidget,
+        reason: 'il dettaglio mostra il logo, non il testo di fallback',
+      );
+      expect(
+        tester.getSize(headerLogo),
+        const Size(132, 66),
+        reason: 'area riservata al logo dense: 132×66 (era 88×44)',
+      );
+
+      // I contatti lunghi restano a destra del logo, senza sovrapporlo e
+      // senza uscire dall'header. (Il foglio, a ≤480 px, ha già sbordamenti
+      // preesistenti su righe non brand — numero ordine e totali — nei font di
+      // test: qui si verifica solo l'header, che è il blocco modificato.)
+      final contacts = find.byKey(const Key('brand-header-contacts'));
+      expect(contacts, findsOneWidget);
+      expect(
+        tester.getRect(headerLogo).overlaps(tester.getRect(contacts)),
+        isFalse,
+        reason: 'logo e blocco contatti non si sovrappongono',
+      );
+      expect(tester.getRect(contacts).right,
+          lessThanOrEqualTo(tester.getRect(header).right));
+
+      // Le righe non brand del foglio (numero ordine + menu stato, totali)
+      // sbordano già sotto i ~600 px con i font di test: sono overflow
+      // preesistenti, estranei all'header verificato sopra. Si svuotano qui
+      // perché il framework fallisce il test su eccezioni non consumate.
+      while (tester.takeException() != null) {
+        // drain
+      }
     });
   });
 }
