@@ -65,8 +65,13 @@ jobs:
         run: |
           # Lista utenti modificabile senza toccare il YAML:
           # Repo → Settings → Variables → Actions → OPENCODE_ALLOWED_USERS
-          ALLOWED_USERS="${{ vars.OPENCODE_ALLOWED_USERS || 'nik2208 vibe-maribit' }}"
+          ALLOWED_USERS="${{ vars.OPENCODE_ALLOWED_USERS || 'nik2208 vibe-maribit mrmorgan77' }}"
           if [ "$IS_MANUAL" = "true" ]; then exit 0; fi
+          ASSOC="${{ github.event.issue.author_association || github.event.comment.author_association }}"
+          if [ "$ASSOC" = "OWNER" ] || [ "$ASSOC" = "COLLABORATOR" ] || [ "$ASSOC" = "MEMBER" ]; then
+            echo "Utente '$COMMENT_AUTHOR' autorizzato con associazione $ASSOC."
+            exit 0
+          fi
           if ! echo " $ALLOWED_USERS " | grep -q " $COMMENT_AUTHOR "; then
             echo "Utente '$COMMENT_AUTHOR' non autorizzato. Interrompo."
             exit 1
@@ -562,9 +567,9 @@ jobs:
           if [ -n "$TARGET_ISSUE" ]; then
             MSG="⏱️ **Attenzione**: la sessione di lavoro ha raggiunto il limite di tempo o è stata interrotta.
 
-Le modifiche prodotte finora sono state salvate e pushate sul branch \`$BRANCH_NAME\`.
-Il lavoro può essere completato e ripreso avviando una nuova run con:
-\`/oc riprendi e completa il lavoro sul branch $BRANCH_NAME\`"
+            Le modifiche prodotte finora sono state salvate e pushate sul branch \`$BRANCH_NAME\`.
+            Il lavoro può essere completato e ripreso avviando una nuova run con:
+            \`/oc riprendi e completa il lavoro sul branch $BRANCH_NAME\`"
             JSON_BODY=$(jq -n --arg b "$MSG" '{"body": $b}')
             curl -s -X POST "$API/issues/$TARGET_ISSUE/comments" \
               -H "Authorization: Bearer $GH_TOKEN" \
