@@ -1,7 +1,7 @@
 name: simple_order_manager
 description: "Gestione preventivi, ordini, clienti e catalogo senza fatturazione"
 publish_to: 'none'
-version: 1.4.0+5
+version: 1.5.0+6
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,6 +9,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Pin esatto (non `^`): `^1.1.2` risolverebbe su 1.2.4, che richiede Dart
+  # 3.11 e romperebbe la build con Flutter 3.27.4 (Dart 3.6).
+  image_picker: 1.1.2
+  # Normalizzazione del logo in Dart puro: era già presente come dipendenza
+  # transitiva di `pdf_widget_wrapper`, qui diventa diretta.
+  image: ^4.5.4
   path_provider: ^2.1.5
   pdf: ^3.11.3
   printing: ^5.14.3

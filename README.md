@@ -1,6 +1,6 @@
 # Simple Order Manager 📱
 
-**Versione corrente: `1.4.0` (build `5`)** — in-app: icona `ⓘ` ("Info & Versione") nelle tre tab.
+**Versione corrente: `1.5.0` (build `6`)** — in-app: icona `ⓘ` ("Info & Versione") nelle quattro tab.
 
 Applicazione Flutter completa per la gestione offline di preventivi, schede lavoro, anagrafica clienti e catalogo prodotti/servizi (ispirata a *Invoice Simple*, senza emissione di fatture fiscali).
 
@@ -21,6 +21,7 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
   - Flusso stati con badge colorati: `Bozza`, `In attesa`, `Approvato`, `Completato`.
   - Visualizzazione scheda documento riassuntiva in stile preventivo formale.
   - **Esportazione & Anteprima PDF**: generazione del file reale con `pdf`, visualizzazione dell'anteprima a schermo con `printing` (`PdfPreview`) e condivisione esplicita tramite foglio nativo del sistema.
+  - Intestazione dinamica: logo a sinistra, nome e contatti del mittente allineati a destra, numero/data/pill di stato nella riga sotto (stesso layout nell'anteprima a schermo e nel PDF stampato).
 - **Tab "Documenti"** (ex Preventivi/Ordini):
   - Barra di sync con ultimo aggiornamento e bottone di aggiornamento manuale.
   - Carosello KPI con preventivi attivi, ordini confermati e documenti in attesa di firma.
@@ -30,7 +31,17 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
   - Azione secondaria dedicata allo stato: `Traccia Spedizione` (riassunto negli appunti + sheet),
     `Invia per firma` (riassunto + sheet con "Genera PDF e condividi") e `Condividi PDF`
     (genera il PDF, apre l'anteprima e permette la condivisione).
-  - Pulsante **Genera PDF e condividi** anche nel bottom sheet di dettaglio del documento.
+  - Pulsante **Genera PDF e condividi** anche nel bottom sheet di dettaglio del documento, che apre
+    con l'intestazione brand in cima (logo + nome e contatti del mittente).
+- **Tab "Impostazioni" → Profilo / Brand**:
+  - Logo del mittente caricato dalla galleria: l'immagine viene normalizzata (PNG, lato massimo
+    1024 px) e salvata in `<appDocuments>/brand/logo.png`; nelle preferenze viene salvato solo il
+    percorso, mai i byte.
+  - Dati del mittente: Nome e cognome, Ruolo/Qualifica, Telefono 1, Telefono 2, Sito web, Email
+    principale, Email secondaria.
+  - Anteprima **live** dell'intestazione: ciò che si vede qui è ciò che viene stampato nel PDF.
+  - I dati sono salvati immediatamente in locale e ricaricati all'avvio dell'app; senza profilo
+    l'intestazione ripiega sul nome dell'app (`Simple Order Manager`).
 - **Persistenza Offline Garantita**:
   - Salvataggio automatico locale in formato JSON tramite `shared_preferences`.
   - Nessuna dipendenza da server esterni o database cloud: funzionamento 100% offline.

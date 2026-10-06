@@ -22,7 +22,6 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import 'package:simple_order_manager/documents/document_pdf.dart';
-import 'package:simple_order_manager/theme/app_theme.dart';
 
 /// Schermata per la visualizzazione dell'anteprima PDF e la relativa condivisione.
 class DocumentPdfPreviewScreen extends StatefulWidget {
@@ -52,8 +51,8 @@ class _DocumentPdfPreviewScreenState extends State<DocumentPdfPreviewScreen> {
 
   /// Callback di lettura del file PDF, mantenuto stabile per evitare
   /// rilanci multipli della rasterizzazione in `didUpdateWidget`.
-  late final LayoutCallback _readPdfBytes =
-      (PdfPageFormat format) => widget.result.file.readAsBytes();
+  Future<Uint8List> _readPdfBytes(PdfPageFormat format) =>
+      widget.result.file.readAsBytes();
 
   /// Apre il foglio di condivisione nativo per il file già salvato.
   Future<void> _sharePdf(BuildContext context) async {

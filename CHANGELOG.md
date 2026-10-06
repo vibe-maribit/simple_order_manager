@@ -12,6 +12,52 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 Nessuna modifica in corso.
 
+## [1.5.0] - 2026-10-06
+
+### Added
+
+- Nuova quarta tab **Impostazioni → Profilo / Brand** (`lib/settings/brand_settings_screen.dart`) per
+  gestire i dati del mittente usati in intestazione ai documenti:
+  - **logo** con caricamento dalla galleria (`image_picker`), anteprima, rimozione e descrizione
+    della dimensione del file;
+  - **7 campi testuali**: Nome e cognome, Ruolo/Qualifica, Telefono 1, Telefono 2, Sito web,
+    Email principale, Email secondaria, con `TextInputType` e `AutofillHints` coerenti;
+  - anteprima **live** dell'intestazione (stesso widget usato nel dettaglio documento).
+- `lib/settings/brand_logo_store.dart`: persistenza del logo su disco in
+  `<appDocuments>/brand/logo.png`, con normalizzazione deterministica in Dart puro
+  (PNG, lato massimo 1024 px, fallback JPEG sotto i 2 MB). In `SharedPreferences` viene salvato
+  **solo il path**: i byte dell'immagine non entrano mai nelle preferenze.
+- `lib/settings/brand_header.dart`: widget condiviso dell'intestazione (logo a sinistra, nome e
+  contatti allineati a destra), usato sia dall'anteprima live sia dal bottom sheet di dettaglio.
+- `lib/models/models.dart`: modello `BrandProfile` (logoPath, fullName, role, phone1, phone2,
+  website, emailPrimary, emailSecondary) con `toJson`/`fromJson`/`copyWith`, getter derivati
+  (`hasLogo`, `isEmpty`, `displayName`, `contactLines`, `pdfHeaderLines`) e costante
+  `BrandProfile.empty`.
+- `StorageService.loadBrand()` / `saveBrand()` su chiave `simple_orders_brand_v1`: chiave assente,
+  stringa vuota o JSON corrotto restituiscono il profilo vuoto senza eccezioni (nessun seed: il
+  profilo vuoto è uno stato valido).
+- Dipendenze: `image_picker: 1.1.2` (**pin esatto**, non `^1.1.2`: la serie 1.2.x richiede Dart
+  3.11 e romperebbe la build con Flutter 3.27.4 / Dart 3.6) e `image: ^4.5.4`, già presente come
+  dipendenza transitiva di `pdf_widget_wrapper` e quindi senza download aggiuntivo.
+- Test: `test/brand_test.dart` (modello, persistenza, normalizzazione/salvataggio del logo),
+  `test/brand_settings_test.dart` (pannello, anteprima live, caricamento/rimozione logo, layout a
+  360×640) e nuovi casi in `test/document_pdf_test.dart` / `test/documents_ui_test.dart`.
+
+### Changed
+
+- `lib/documents/document_pdf.dart`: intestazione del PDF **a due righe** — prima riga logo (o
+  marchio di fallback `Simple Order Manager`) a sinistra e blocco nome + contatti allineato a
+  destra, seconda riga con tipo documento, numero, data e pill di stato; il bordo inferiore
+  `AppColors.primary` 1.5 resta invariato. I byte del logo vengono letti una sola volta per
+  documento e un file non leggibile non impedisce l'esportazione.
+- `lib/documents/document_pdf.dart`: la firma del footer usa il nome del mittente salvato e ripiega
+  su `Simple Order Manager`, così header e footer non si contraddicono.
+- `lib/main.dart`: la AppBar Documenti mostra il brand dinamico (`Colormeter` resta il fallback a
+  profilo vuoto) e il bottom sheet di dettaglio apre con il blocco brand in alto; il foglio parte
+  più aperto (95%) per mostrare logo, dati e azioni senza scorrere.
+- Nessuna modifica ad `android/` né alla pipeline CI: la galleria usa il Photo Picker di Android 13+
+  (`ACTION_GET_CONTENT` sotto), quindi nessun nuovo permesso nel manifest.
+
 ## [1.4.0] - 2026-10-06
 
 ### Added

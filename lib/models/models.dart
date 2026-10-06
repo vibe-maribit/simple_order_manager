@@ -341,3 +341,157 @@ class WorkOrder {
     );
   }
 }
+
+/// Dati del mittente (logo, nome, ruolo, contatti) usati nell'header dei
+/// documenti.
+///
+/// Il profilo è **globale**: non viene copiato dentro ogni [WorkOrder], ma
+/// caricato all'avvio e applicato a ogni documento generato/anteprato. I campi
+/// sono stringhe vuote di default perché il JSON salvato in una versione
+/// precedente non contiene nessuna di queste chiavi: la chiave assente (o il
+/// valore `null`) deve restituire il campo vuoto, non fallire il parse
+/// (stesso approccio di [WorkOrder.fromJson] sul campo `docType`).
+class BrandProfile {
+  /// Percorso assoluto del logo su disco: in `SharedPreferences` viene salvato
+  /// solo il path, mai i byte dell'immagine.
+  final String? logoPath;
+
+  /// Nome e cognome del mittente, es. `Andrea Morgante`.
+  final String fullName;
+
+  /// Ruolo / qualifica, es. `Tecnico Commerciale`.
+  final String role;
+
+  /// Telefono principale (cellulare).
+  final String phone1;
+
+  /// Telefono secondario (ufficio), opzionale.
+  final String phone2;
+
+  /// Sito web.
+  final String website;
+
+  /// Email principale.
+  final String emailPrimary;
+
+  /// Email secondaria, opzionale.
+  final String emailSecondary;
+
+  const BrandProfile({
+    this.logoPath,
+    this.fullName = '',
+    this.role = '',
+    this.phone1 = '',
+    this.phone2 = '',
+    this.website = '',
+    this.emailPrimary = '',
+    this.emailSecondary = '',
+  });
+
+  /// Profilo vuoto: stato valido (nessun dato salvato), non un errore.
+  static const BrandProfile empty = BrandProfile();
+
+  /// Brand mostrato nella AppBar Documenti quando il mittente non ha un nome.
+  static const String fallbackBrandName = 'Colormeter';
+
+  /// Marchio mostrato nell'header dei documenti quando il mittente non ha
+  /// caricato un logo: resta il nome dell'app, come nelle versioni precedenti
+  /// (a differenza di [fallbackBrandName, che è il brand della vetrina).
+  static const String documentHeaderFallback = 'Simple Order Manager';
+
+  /// Campo del profilo letto dal JSON: un valore non testuale (o assente)
+  /// diventa stringa vuota, così un JSON modificato a mano non impedisce
+  /// l'avvio dell'app.
+  static String? _brandText(Object? value) => value is String ? value : null;
+
+  bool get hasLogo => logoPath != null && logoPath!.trim().isNotEmpty;
+
+  /// `true` quando non c'è né logo né alcun dato testuale.
+  bool get isEmpty =>
+      !hasLogo &&
+      fullName.trim().isEmpty &&
+      role.trim().isEmpty &&
+      phone1.trim().isEmpty &&
+      phone2.trim().isEmpty &&
+      website.trim().isEmpty &&
+      emailPrimary.trim().isEmpty &&
+      emailSecondary.trim().isEmpty;
+
+  /// Nome mostrato come brand: il mittente, con fallback al nome predefinito
+  /// dell'azienda quando il profilo non è ancora stato compilato.
+  String get displayName {
+    final name = fullName.trim();
+    return name.isEmpty ? fallbackBrandName : name;
+  }
+
+  /// Righe di contatto dell'header, nell'ordine in cui vengono stampate,
+  /// scartando i campi vuoti (nessuna riga vuota nel layout).
+  List<String> get contactLines => <String>[
+        for (final line in <String>[
+          role,
+          phone1,
+          phone2,
+          website,
+          emailPrimary,
+          emailSecondary,
+        ])
+          if (line.trim().isNotEmpty) line.trim(),
+      ];
+
+  /// Righe dell'header PDF: nome in grassetto seguito dai contatti.
+  List<String> get pdfHeaderLines => <String>[
+        if (fullName.trim().isNotEmpty) fullName.trim(),
+        ...contactLines,
+      ];
+
+  Map<String, dynamic> toJson() => {
+        'logoPath': logoPath,
+        'fullName': fullName,
+        'role': role,
+        'phone1': phone1,
+        'phone2': phone2,
+        'website': website,
+        'emailPrimary': emailPrimary,
+        'emailSecondary': emailSecondary,
+      };
+
+  factory BrandProfile.fromJson(Map<String, dynamic> json) {
+    final path = _brandText(json['logoPath']);
+    return BrandProfile(
+      // Path vuoto ⇒ nessun logo: evita di salvare un percorso inutile.
+      logoPath: path == null || path.trim().isEmpty ? null : path,
+      fullName: _brandText(json['fullName']) ?? '',
+      role: _brandText(json['role']) ?? '',
+      phone1: _brandText(json['phone1']) ?? '',
+      phone2: _brandText(json['phone2']) ?? '',
+      website: _brandText(json['website']) ?? '',
+      emailPrimary: _brandText(json['emailPrimary']) ?? '',
+      emailSecondary: _brandText(json['emailSecondary']) ?? '',
+    );
+  }
+
+  /// Copia con campi sostituiti: `logoPath: null` azzera esplicitamente il
+  /// logo (a differenza dell'omissione, che lo conserva).
+  BrandProfile copyWith({
+    String? logoPath,
+    bool clearLogo = false,
+    String? fullName,
+    String? role,
+    String? phone1,
+    String? phone2,
+    String? website,
+    String? emailPrimary,
+    String? emailSecondary,
+  }) {
+    return BrandProfile(
+      logoPath: clearLogo ? null : (logoPath ?? this.logoPath),
+      fullName: fullName ?? this.fullName,
+      role: role ?? this.role,
+      phone1: phone1 ?? this.phone1,
+      phone2: phone2 ?? this.phone2,
+      website: website ?? this.website,
+      emailPrimary: emailPrimary ?? this.emailPrimary,
+      emailSecondary: emailSecondary ?? this.emailSecondary,
+    );
+  }
+}
