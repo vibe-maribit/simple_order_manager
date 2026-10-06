@@ -28,7 +28,7 @@ jobs:
         github.event.comment.user.login != 'github-actions[bot]' &&
         (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')))
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 120
 
     env:
       GH_API: "https://api.github.com"
@@ -95,6 +95,24 @@ jobs:
           git config --global user.name "opencode-bot"
           git config --global user.email "opencode-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+      # ── 3b. Setup ambiente SDK [SPECIFICO PER FLUTTER] ────────────────────────
+      # NOTA: Questa sezione è specifica per questo progetto Flutter. Pre-installa
+      # Flutter SDK e Java con caching rapido (30 secondi), evitando che OpenCode
+      # perda 15-20 minuti a scaricare l'SDK da zero in /tmp ad ogni run.
+      # Se questo workflow viene riutilizzato su un altro progetto (es. Node.js, Python,
+      # Go, Rust), questa sezione va sostituita con l'action apposita (es. setup-node, setup-python).
+      - name: Set up Java 17 (per Android tooling)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK (specifico per questo progetto)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
 
       # ── 4. OpenCode CLI (nessuna API key richiesta) ──────────────────────────
       - name: Install OpenCode CLI
