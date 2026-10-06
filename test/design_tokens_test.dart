@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -181,6 +183,48 @@ void main() {
           ));
       expect(resolved.textTheme.headlineSmall?.fontFamily, equals('Inter'));
       expect(resolved.appBarTheme.elevation, equals(0));
+    });
+  });
+
+  // Il tema dichiara la stringa 'Inter' indipendentente dall'asset: questo
+  // gruppo verifica che i file siano davvero bundled, così un'eventuale
+  // rimozione del blocco `flutter: fonts:` fa fallire il test.
+  group('Asset font Inter bundled', () {
+    test('pubspec.yaml dichiara la famiglia Inter con i 3 pesi', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+
+      expect(pubspec, contains('family: Inter'));
+
+      const weights = <String, String>{
+        'Inter-Regular.ttf': '400',
+        'Inter-SemiBold.ttf': '600',
+        'Inter-Bold.ttf': '700',
+      };
+      for (final entry in weights.entries) {
+        expect(
+          RegExp(
+            'asset: assets/fonts/${entry.key}\\s*\\n\\s*weight: ${entry.value}',
+          ).hasMatch(pubspec),
+          isTrue,
+          reason: 'asset/weight ${entry.key} → ${entry.value} mancante',
+        );
+      }
+    });
+
+    test('i file .ttf sono presenti e non vuoti in assets/fonts', () {
+      for (final name in [
+        'Inter-Regular.ttf',
+        'Inter-SemiBold.ttf',
+        'Inter-Bold.ttf',
+      ]) {
+        final file = File('assets/fonts/$name');
+        expect(
+          file.existsSync(),
+          isTrue,
+          reason: 'asset font mancante: assets/fonts/$name',
+        );
+        expect(file.lengthSync(), greaterThan(0));
+      }
     });
   });
 }

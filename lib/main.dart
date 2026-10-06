@@ -2955,10 +2955,10 @@ class ClientsTab extends StatefulWidget {
   State<ClientsTab> createState() => _ClientsTabState();
 }
 
-/// Campo di ricerca condiviso dalle tab Clienti / Catalogo.
+/// Decorazione del campo di ricerca condiviso dalle tab Clienti / Catalogo.
 ///
-/// Usa i token del design system: riempimento `surfaceContainerLowest` con
-/// ombra leggera e raggio [AppRadii.xl].
+/// Usa i token del design system: riempimento `surfaceContainerLowest` e
+/// raggio [AppRadii.xl].
 InputDecoration appSearchFieldDecoration(String hintText) {
   return InputDecoration(
     hintText: hintText,
@@ -2982,6 +2982,38 @@ InputDecoration appSearchFieldDecoration(String hintText) {
       borderSide: BorderSide(color: AppColors.primary, width: 1.6),
     ),
   );
+}
+
+/// Campo di ricerca condiviso dalle tab Clienti / Catalogo.
+///
+/// Aggiunge all'input l'ombra leggera prevista dal design system: colore
+/// derivato da `onSurface` all'8%, raggio [AppRadii.xl].
+class AppSearchField extends StatelessWidget {
+  const AppSearchField({super.key, required this.hintText, this.onChanged});
+
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x14131B2E),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
+        decoration: appSearchFieldDecoration(hintText),
+        onChanged: onChanged,
+      ),
+    );
+  }
 }
 
 class _ClientsTabState extends State<ClientsTab> {
@@ -3009,11 +3041,8 @@ class _ClientsTabState extends State<ClientsTab> {
               horizontal: AppSpacing.margin,
               vertical: AppSpacing.spaceSm,
             ),
-            child: TextField(
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
-              decoration: appSearchFieldDecoration(
-                'Cerca cliente per nome, telefono, email...',
-              ),
+            child: AppSearchField(
+              hintText: 'Cerca cliente per nome, telefono, email...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
@@ -3341,11 +3370,8 @@ class _CatalogTabState extends State<CatalogTab> {
               horizontal: AppSpacing.margin,
               vertical: AppSpacing.spaceSm,
             ),
-            child: TextField(
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
-              decoration: appSearchFieldDecoration(
-                'Cerca prodotto o servizio...',
-              ),
+            child: AppSearchField(
+              hintText: 'Cerca prodotto o servizio...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),

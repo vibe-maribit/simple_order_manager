@@ -307,7 +307,9 @@ abstract final class AppTheme {
       canvasColor: AppColors.surface,
       splashFactory: InkSparkle.splashFactory,
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surface,
+        // `surface/80` come da mockup: la barra resta traslucida sopra il
+        // contenuto sottostante senza introdurre tinte di superficie.
+        backgroundColor: AppColors.surface.withValues(alpha: 0.8),
         foregroundColor: AppColors.onSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
