@@ -56,7 +56,7 @@ jobs:
       # 3. Variabile di repository/progetto vars.OPENCODE_DEFAULT_MODEL
       # 4. Fallback definitivo: opencode/big-pickle
       DEFAULT_MODEL: ${{ vars.OPENCODE_DEFAULT_MODEL || 'opencode/big-pickle' }}
-      VISUAL_MODEL: ${{ vars.OPENCODE_VISUAL_MODEL || 'space-bunny-free' }}
+      VISUAL_MODEL: ${{ vars.OPENCODE_VISUAL_MODEL || 'opencode/space-bunny-free' }}
       MAX_ITERATIONS: "4"
 
     steps:
@@ -260,6 +260,11 @@ jobs:
             echo "⚙️ Utilizzo modello di default configurato ($FINAL_MODEL)."
           fi
 
+          # Normalizza: se il modello non contiene '/' aggiungi 'opencode/'
+          if [ -n "$FINAL_MODEL" ] && [[ "$FINAL_MODEL" != *"/"* ]]; then
+            FINAL_MODEL="opencode/$FINAL_MODEL"
+          fi
+
           # Fallback di sicurezza: se per qualunque motivo è vuoto
           [ -z "$FINAL_MODEL" ] && FINAL_MODEL="opencode/big-pickle"
 
@@ -286,8 +291,7 @@ jobs:
             CLEAN_PROMPT=$(cat /tmp/clean_prompt.txt)
             CONTEXT=$(cat /tmp/context.txt 2>/dev/null || true)
 
-            opencode run --agent plan --model "$CHOSEN_MODEL" \
-              "Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
+            PLAN_PROMPT="Sei in modalità PLAN (SOLA LETTURA): NON modificare alcun file.
             Analizza il codebase e la richiesta, poi produci un piano di lavoro in Markdown
             con questa struttura ESATTA:
 
@@ -304,7 +308,16 @@ jobs:
             Contesto: $ISSUE_TITLE - $ISSUE_BODY
             $CONTEXT
 
-            Restituisci SOLO il documento Markdown del piano." | tee "$PLAN_FILE"
+            Restituisci SOLO il documento Markdown del piano."
+
+            if ! opencode run --agent plan --model "$CHOSEN_MODEL" "$PLAN_PROMPT" > "$PLAN_FILE"; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL. Fallback a opencode/big-pickle per la pianificazione..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                opencode run --agent plan --model "$CHOSEN_MODEL" "$PLAN_PROMPT" > "$PLAN_FILE" || true
+              fi
+            fi
+            cat "$PLAN_FILE"
 
             cp "$PLAN_FILE" /tmp/plan.md
             git add "$PLAN_FILE"
@@ -328,8 +341,7 @@ jobs:
 
           for i in $(seq 1 "$MAX_ITERATIONS"); do
             echo "::group::Iterazione $i — BUILD ($CHOSEN_MODEL)"
-            opencode run --agent build --auto --model "$CHOSEN_MODEL" \
-              "Sei in modalità BUILD. Implementa il piano completando TUTTI i task e
+            BUILD_PROMPT="Sei in modalità BUILD. Implementa il piano completando TUTTI i task e
             soddisfacendo TUTTI gli Acceptance Criteria. Applica le modifiche ai file.
 
             === PIANO ===
@@ -340,6 +352,14 @@ jobs:
 
             === FEEDBACK REVIEW PRECEDENTE ===
             $REVIEW_FEEDBACK"
+
+            if ! opencode run --agent build --auto --model "$CHOSEN_MODEL" "$BUILD_PROMPT"; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL. Fallback a opencode/big-pickle per la build..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                opencode run --agent build --auto --model "$CHOSEN_MODEL" "$BUILD_PROMPT" || true
+              fi
+            fi
             echo "::endgroup::"
 
             # Checkpoint: commit e push immediato sul branch remoto dopo la build
@@ -348,8 +368,7 @@ jobs:
             git push origin "$BRANCH_NAME" || true
 
             echo "::group::Iterazione $i — REVIEW ($CHOSEN_MODEL)"
-            opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" \
-              "Verifica sul codice ATTUALE se OGNI Acceptance Criterion del piano è
+            REVIEW_PROMPT="Verifica sul codice ATTUALE se OGNI Acceptance Criterion del piano è
             soddisfatto. Puoi eseguire build/lint/test ma NON modificare i file.
 
             === PIANO ===
@@ -357,8 +376,17 @@ jobs:
 
             Scrivi come ULTIMA riga ESATTAMENTE una di queste:
             - 'VERDICT: PASS'  se tutti i criteri sono soddisfatti
-            - 'VERDICT: FAIL'  altrimenti, seguita da un elenco puntato dei criteri NON
-              soddisfatti e di cosa manca." | tee /tmp/review.txt
+            - 'VERDICT: FAIL'  altrimenti, seguita da un elenco puntato dei criteri NON soddisfatti."
+
+            REVIEW_OUTPUT=$(opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" "$REVIEW_PROMPT" 2>&1 || true)
+            if echo "$REVIEW_OUTPUT" | grep -q "Unexpected server error" || [ -z "$REVIEW_OUTPUT" ]; then
+              if [ "$CHOSEN_MODEL" != "opencode/big-pickle" ]; then
+                echo "⚠️ Errore con $CHOSEN_MODEL nella review. Fallback a opencode/big-pickle..."
+                CHOSEN_MODEL="opencode/big-pickle"
+                REVIEW_OUTPUT=$(opencode run --agent reviewer --auto --model "$CHOSEN_MODEL" "$REVIEW_PROMPT" 2>&1 || true)
+              fi
+            fi
+            printf '%s\n' "$REVIEW_OUTPUT" | tee /tmp/review.txt
             echo "::endgroup::"
 
             if grep -q 'VERDICT: PASS' /tmp/review.txt; then
