@@ -263,9 +263,9 @@ void main() {
       final content = _pageContent(
         await BrandCardPdfService().buildBytes(_brand(logoPath: null)),
       );
-      // AppColors.primary = 0xFF00288E → rgb(0, 0.15686, 0.55686).
+      // AppColors.primary = 0xFFB8860B → rgb(0.72157, 0.52549, 0.04314).
       expect(content, contains('0 0 212.59843 1.6 re'));
-      expect(content, contains('0 0.15686 0.55686 rg f'));
+      expect(content, contains('0.72157 0.52549 0.04314 rg f'));
     });
   });
 

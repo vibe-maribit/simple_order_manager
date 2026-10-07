@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 
-/// Converte un `Color` nella stringa esadecimale della mockup (`0xFF00288E`).
+/// Converte un `Color` nella stringa esadecimale della mockup (`0xFFB8860B`).
 String hex(Color color) {
   final argb = ((color.a * 255).round() << 24) |
       ((color.r * 255).round() << 16) |
@@ -16,9 +16,10 @@ String hex(Color color) {
 void main() {
   group('AppColors — palette della mockup', () {
     test('espone esattamente i valori hex del design system', () {
-      expect(hex(AppColors.primary), equals('0xFF00288E'));
-      expect(hex(AppColors.primaryContainer), equals('0xFF1E40AF'));
+      expect(hex(AppColors.primary), equals('0xFFB8860B'));
+      expect(hex(AppColors.primaryContainer), equals('0xFF9A7400'));
       expect(hex(AppColors.onPrimary), equals('0xFFFFFFFF'));
+      expect(hex(AppColors.onPrimaryContainer), equals('0xFFFFE6AD'));
       expect(hex(AppColors.secondary), equals('0xFF006A61'));
       expect(hex(AppColors.secondaryContainer), equals('0xFF86F2E4'));
       expect(hex(AppColors.onSecondaryContainer), equals('0xFF006F66'));
@@ -104,12 +105,12 @@ void main() {
   });
 
   group('buildAppTheme()', () {
-    test('non usa ColorScheme.fromSeed e punta a #00288E', () {
+    test('non usa ColorScheme.fromSeed e punta a #B8860B', () {
       final theme = AppTheme.light;
 
       expect(theme.useMaterial3, isTrue);
       expect(theme.colorScheme.primary, equals(AppColors.primary));
-      expect(hex(theme.colorScheme.primary), equals('0xFF00288E'));
+      expect(hex(theme.colorScheme.primary), equals('0xFFB8860B'));
       expect(theme.scaffoldBackgroundColor, equals(AppColors.surface));
     });
 
@@ -169,11 +170,11 @@ void main() {
         ),
       );
 
-      expect(resolved.colorScheme.primary, equals(const Color(0xFF00288E)));
+      expect(resolved.colorScheme.primary, equals(const Color(0xFFB8860B)));
       expect(
           resolved.colorScheme.primaryContainer,
           equals(
-            const Color(0xFF1E40AF),
+            const Color(0xFF9A7400),
           ));
       expect(resolved.colorScheme.surface, equals(const Color(0xFFFAF8FF)));
       expect(

@@ -146,6 +146,31 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
   - `test/design_tokens_test.dart` e la palette `AppColors` restano invariati: l'avviso di
     bassa risoluzione usa i token esistenti `tertiaryFixed` / `onTertiaryFixedVariant`.
 
+### Changed
+
+- **Colore delle grafiche da blu a giallo ocra** (`#00288E` → `#B8860B` DarkGoldenRod):
+  la palette primaria del design system passa dal blu istituzionale al giallo ocra, senza
+  toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
+  - `lib/theme/app_theme.dart`: token `AppColors.primary` `#00288E` → **#B8860B**,
+    `AppColors.primaryContainer` `#1E40AF` → **#9A7400** e
+    `AppColors.onPrimaryContainer` `#B9C3FF` → **#FFE6AD**. Aggiornati anche i doc comment.
+    Il `ColorScheme` esplicito eredita i nuovi token (`primary`, `primaryContainer`,
+    `surfaceTint`).
+  - `lib/main.dart`: l'ombra dei chip di filtro selezionati usava il blu hardcoded
+    `Color(0x1F00288E)`; ora deriva dal token `AppColors.primary` al 12% di alpha, così resta
+    coerente se il primario cambia.
+  - Contesto grafico aggiornato automaticamente (tutti passano dai token): banner in gradiente
+    `primaryContainer → primary`, carosello KPI (accento `primary`), chip di filtro selezionati,
+    pill di stato `Completato`, avatar del logo nell'AppBar Documenti, azioni primarie delle
+    card, totali, tabelle/intestazioni dei documenti PDF e bordo inferiore dell'header.
+  - Nessun SVG/asset statico nel repository: gli SVG sono solo file caricati dall'utente
+    (`BrandLogoStore`) e non fanno parte della palette.
+  - Accessibilità: `onPrimary` resta bianco; il contrasto con `#B8860B` è ≈ **3.25:1**
+    (WCAG AA per testo grande e componenti UI/icone) ed è il migliore della palette ocra
+    proposta; `primaryContainer` scuro mantiene il testo bianco a ≈ **4.31:1**.
+  - Test: `test/design_tokens_test.dart` aggiornato ai nuovi hex (+`onPrimaryContainer`) e
+    `test/brand_card_pdf_test.dart` alla barra primaria `0.72157 0.52549 0.04314 rg f`.
+
 ## [1.5.1] - 2026-10-06
 
 ### Changed
