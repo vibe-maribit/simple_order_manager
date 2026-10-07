@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
@@ -235,6 +233,18 @@ Future<void> _scrollUntilVisible(
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
   }
+}
+
+/// Lascia completare la lettura reale del file logo (`Image.file` non si
+/// risolve nel tempo finto del test) e poi assesta la UI.
+Future<void> _settleImageIo(WidgetTester tester) async {
+  for (var round = 0; round < 20; round++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pumpAndSettle();
 }
 
 /// Scorre fino alla card [orderId] e la rende visibile (scroll-to + assicura
@@ -671,11 +681,12 @@ void main() {
     });
   });
 
-  group('Azioni secondarie → appunti', () {
-    testWidgets('"Condividi PDF" copia il riepilogo e conferma con snackbar', (
+  group('Azioni secondarie → PDF', () {
+    testWidgets('"Condividi PDF" genera il PDF reale e ne apre l\'anteprima', (
       WidgetTester tester,
     ) async {
-      _mockClipboard(tester);
+      final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-ord-1');
       await tester.pumpAndSettle();
@@ -684,20 +695,6 @@ void main() {
       await tester.tap(
         find.byKey(const Key('documents-secondary-action-kpi-ord-1')),
       );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Riassunto di ORD-2026-201 copiato'), findsOneWidget);
-      final stored = await Clipboard.getData(Clipboard.kTextPlain);
-      expect(stored?.text, isNotNull);
-      final text = stored!.text!;
-      expect(text, contains('ORD-2026-201'));
-      expect(text, contains('Cliente Gamma'));
-      expect(text, contains('03 ott 2026'));
-      expect(text, contains('€ 300,00'));
-      expect(text, contains('IVA inc.'));
-      expect(text, contains('Voci: 1'));
-    });
-
       await _settleExport(tester);
 
       // La schermata di anteprima renderizza il file appena scritto.
@@ -961,6 +958,157 @@ void main() {
       await _openCard(tester, 'long-1');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'header con logo reale nel dettaglio a 360x640: 132x66 e '
+        'contatti senza sovrapposizioni', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      // La cache globale di `PaintingBinding` è per path: ogni test usa una
+      // cartella propria, ma si azzera comunque per non dipendere dall'ordine.
+      PaintingBinding.instance.imageCache.clear();
+      addTearDown(PaintingBinding.instance.imageCache.clear);
+
+      final temp = Directory.systemTemp.createTempSync('simple_order_sheet_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      // Logo 2:1 reale: nell'area dense 132×66 riempie l'intera area, quindi
+      // ne misura le dimensioni effettive (prima del +50% erano 88×44).
+      final logo = File(
+        '${temp.path}${Platform.pathSeparator}logo-2x1.png',
+      )..writeAsBytesSync(
+          img.encodePng(img.Image(width: 480, height: 240)),
+        );
+      final brand = _brandProfile.copyWith(
+        logoPath: logo.path,
+        fullName: 'Andrea Morgante Colormeter Amministrazione Srl',
+        emailPrimary: 'amministrazione.vendite@colormeter.it',
+      );
+
+      await _pumpDocumentsTab(tester, _buildOrders(), brand: brand);
+      await _openCard(tester, 'kpi-ord-1');
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-kpi-ord-1')),
+      );
+      await _settleImageIo(tester);
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      final headerLogo = find.descendant(
+        of: header,
+        matching: find.byKey(const Key('brand-header-logo')),
+      );
+      expect(
+        headerLogo,
+        findsOneWidget,
+        reason: 'il dettaglio mostra il logo, non il testo di fallback',
+      );
+      expect(
+        tester.getSize(headerLogo),
+        const Size(132, 66),
+        reason: 'area riservata al logo dense: 132×66 (era 88×44)',
+      );
+
+      // I contatti lunghi restano a destra del logo, senza sovrapporlo e
+      // senza uscire dall'header.
+      final contacts = find.byKey(const Key('brand-header-contacts'));
+      expect(contacts, findsOneWidget);
+      expect(
+        tester.getRect(headerLogo).overlaps(tester.getRect(contacts)),
+        isFalse,
+        reason: 'logo e blocco contatti non si sovrappongono',
+      );
+      expect(tester.getRect(contacts).right,
+          lessThanOrEqualTo(tester.getRect(header).right));
+
+      // Nessun overflow nel foglio a 360x640 con logo reale e testi lunghi:
+      // header compreso, numero ordine, righe dei totali e pulsanti.
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'nessun overflow nel bottom sheet a 360x640 con logo',
+      );
+    });
+
+    testWidgets(
+        'foglio dettaglio a 320x640 con logo reale e testi lunghi: '
+        'nessun overflow', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      PaintingBinding.instance.imageCache.clear();
+      addTearDown(PaintingBinding.instance.imageCache.clear);
+
+      final temp =
+          Directory.systemTemp.createTempSync('simple_order_sheet_320_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      final logo = File(
+        '${temp.path}${Platform.pathSeparator}logo-2x1.png',
+      )..writeAsBytesSync(
+          img.encodePng(img.Image(width: 480, height: 240)),
+        );
+
+      // Stesso ordine "molto lungo" del caso 320x640 della lista, così il
+      // foglio deve reggere numero ordine, cliente, voce e totali lunghi.
+      final orders = <WorkOrder>[
+        WorkOrder(
+          id: 'long-1',
+          orderNumber: 'ORD-2026-000000000042-EXTRA-LONG-SUFFIX',
+          clientId: 'c1',
+          clientName:
+              'Studio Tecnico Bianchi Associati Sperimentale Di Milano Nord',
+          items: <OrderItem>[
+            OrderItem(
+              id: 'li1',
+              catalogItemId: 'p1',
+              name: 'Sostituzione Scheda di Controllo Industriale Con Vasca',
+              unitPrice: 12345.67,
+              taxRate: 22.0,
+              quantity: 12.0,
+            ),
+          ],
+          status: OrderStatus.inAttesa,
+          date: DateTime(2026, 10, 6),
+        ),
+      ];
+      final brand = _brandProfile.copyWith(
+        logoPath: logo.path,
+        fullName: 'Andrea Morgante Colormeter Amministrazione Srl',
+        emailPrimary: 'amministrazione.vendite@colormeter.it',
+      );
+
+      await _pumpDocumentsTab(tester, orders, brand: brand);
+      expect(tester.takeException(), isNull);
+
+      await _openCard(tester, 'long-1');
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-long-1')),
+      );
+      await _settleImageIo(tester);
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      final headerLogo = find.descendant(
+        of: header,
+        matching: find.byKey(const Key('brand-header-logo')),
+      );
+      expect(headerLogo, findsOneWidget, reason: 'logo reale nel foglio');
+      expect(
+        tester.getSize(headerLogo),
+        const Size(132, 66),
+        reason: 'area riservata dense invariata anche a 320 px',
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'nessun overflow nel bottom sheet a 320x640 con logo reale '
+            'e testi lunghi',
+      );
     });
   });
 }

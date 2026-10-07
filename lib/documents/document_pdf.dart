@@ -143,8 +143,15 @@ class DocumentPdfService {
     return '${parts.join('-')}.pdf';
   }
 
-  /// Logo stampato a sinistra dell'header: alto 48 pt (circa 17 mm).
-  static const double logoHeight = 48;
+  /// Logo stampato a sinistra dell'header: alto 72 pt (circa 25,4 mm).
+  ///
+  /// Le proporzioni native sono sempre preservate (`pw.BoxFit.contain` in
+  /// [_brandMark]): l'altezza è il vincolo, la larghezza segue il rapporto
+  /// dell'immagine. Il `pw.Expanded` che ospita il marchio riserva metà della
+  /// larghezza utile (~257 pt su A4 con margini di 36 pt), quindi un logo con
+  /// rapporto oltre ~3.5:1 viene ridotto per contenimento e reso leggermente
+  /// più basso del valore dichiarato qui.
+  static const double logoHeight = 72;
 
   /// I byte del logo sono validi solo se il pacchetto `image` riconosce il
   /// formato: un file non-immagine (o corrotto) viene ignorato e l'header

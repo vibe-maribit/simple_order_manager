@@ -65,8 +65,15 @@ class BrandHeader extends StatelessWidget {
 
   /// Logo a sinistra; in assenza del file (o del logo) resta il marchio di
   /// fallback dell'app, esattamente come nel PDF.
+  ///
+  /// L'area riservata mantiene il rapporto 2:1 del PDF (larghezza = 2 ×
+  /// altezza) e il logo vi è disegnato con `BoxFit.contain`: l'altezza vale
+  /// 84 px nella versione completa, 66 px in quella `dense` (+50% rispetto
+  /// alle dimensioni precedenti, coerente con `DocumentPdfService.logoHeight`).
+  /// Un file non quadrato riempie comunque tutta l'altezza disponibile senza
+  /// deformarsi.
   Widget _buildIdentity() {
-    final size = dense ? 44.0 : 56.0;
+    final size = dense ? 66.0 : 84.0;
     final fallback = Text(
       BrandProfile.documentHeaderFallback,
       maxLines: 2,

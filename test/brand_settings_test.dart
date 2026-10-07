@@ -7,12 +7,9 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart' show ImageSource;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
+import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_logo_store.dart';
 import 'package:simple_order_manager/version.dart';
-
-/// PNG valido (logo di test) generato al volo.
-Uint8List _logoBytes({int size = 40}) =>
-    img.encodePng(img.Image(width: size, height: size));
 
 /// Intercetta il canale nativo di `image_picker`.
 ///
@@ -43,14 +40,18 @@ List<MethodCall> _mockImagePicker(
   return calls;
 }
 
-/// Scrive un PNG su disco e restituisce il path: simula la foto scelta dalla
-/// galleria.
-String _writePickablePng(Directory directory, {int size = 40}) {
+/// Scrive un PNG delle dimensioni richieste e restituisce il path: simula la
+/// foto scelta dalla galleria.
+String _writePng(Directory directory, int width, int height) {
   final file = File(
-    '${directory.path}${Platform.pathSeparator}gallery-$size.png',
-  )..writeAsBytesSync(_logoBytes(size: size));
+    '${directory.path}${Platform.pathSeparator}gallery-$width-$height.png',
+  )..writeAsBytesSync(img.encodePng(img.Image(width: width, height: height)));
   return file.path;
 }
+
+/// PNG quadrato su disco (logo di test predefinito).
+String _writePickablePng(Directory directory, {int size = 40}) =>
+    _writePng(directory, size, size);
 
 /// Schermo alto: il pannello (logo + 7 campi + anteprima) entra tutto senza
 /// scroll, così le verifiche restano deterministiche.
@@ -94,10 +95,30 @@ Finder _inPreview(Finder matcher) => find.descendant(
       matching: matcher,
     );
 
+/// Scorre il pannello finché [target] è costruito e dentro il viewport.
+Future<void> _scrollUntilVisible(
+  WidgetTester tester,
+  Finder target, {
+  int maxScrolls = 12,
+}) async {
+  for (var i = 0; i < maxScrolls && target.evaluate().isEmpty; i++) {
+    await tester.drag(find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    // Il logo viene sempre salvato in `<systemTemp>/brand/logo.png`: la cache
+    // globale di `PaintingBinding` usa path+scale come chiave, quindi senza
+    // pulizia i pixel di un test resterebbero visibili al test successivo
+    // (dimensioni sbagliate nell'anteprima).
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  });
 
   group('Impostazioni → Profilo / Brand', () {
     testWidgets('la quarta destinazione apre il pannello con i 7 campi', (
@@ -265,6 +286,136 @@ void main() {
     });
   });
 
+  group('BrandHeader → area riservata al logo', () {
+    /// Pompa l'header con un logo di [width]×[height] pixel e restituisce la
+    /// dimensione effettiva del disegno.
+    Future<Size> renderedLogoSize(
+      WidgetTester tester,
+      int width,
+      int height, {
+      required bool dense,
+    }) async {
+      final temp = Directory.systemTemp.createTempSync('simple_order_brand_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      final brand = const BrandProfile(fullName: 'Andrea Morgante')
+          .copyWith(logoPath: _writePng(temp, width, height));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+                child: BrandHeader(brand: brand, dense: dense)),
+          ),
+        ),
+      );
+      await _settleLogoIo(tester);
+
+      final logo = find.byKey(const Key('brand-header-logo'));
+      expect(logo, findsOneWidget);
+      final image = tester.widget<Image>(logo);
+      expect(image.fit, BoxFit.contain);
+      expect(image.alignment, Alignment.centerLeft);
+      expect(tester.takeException(), isNull);
+      return tester.getSize(logo);
+    }
+
+    testWidgets('area 2:1: 168x84 completa, 132x66 dense (era 112x56 / 88x44)',
+        (
+      WidgetTester tester,
+    ) async {
+      // Logo 2:1 (480×240): riempie esattamente l'area riservata, quindi ne
+      // misura larghezza e altezza. +50% rispetto alle dimensioni precedenti.
+      expect(
+        await renderedLogoSize(tester, 480, 240, dense: false),
+        const Size(168, 84),
+      );
+      expect(
+        await renderedLogoSize(tester, 480, 240, dense: true),
+        const Size(132, 66),
+      );
+    });
+
+    testWidgets('logo quadrato: contenuto in 84x84 / 66x66, mai stirato', (
+      WidgetTester tester,
+    ) async {
+      // Logo 1:1: `BoxFit.contain` lo limita all'altezza dell'area, quindi
+      // resta quadrato anche se l'area è 2:1.
+      expect(
+        await renderedLogoSize(tester, 240, 240, dense: false),
+        const Size(84, 84),
+      );
+      expect(
+        await renderedLogoSize(tester, 240, 240, dense: true),
+        const Size(66, 66),
+      );
+    });
+
+    testWidgets('logo panoramico 4:1: contenuto, non schiacciato', (
+      WidgetTester tester,
+    ) async {
+      expect(
+        await renderedLogoSize(tester, 400, 100, dense: true),
+        const Size(132, 33),
+        reason: '4:1 in 132×66 ⇒ altezza 33, larghezza 132: nessuno stiramento',
+      );
+    });
+
+    testWidgets(
+        'a 320 px di schermo (280 utili nel foglio) nessun overflow '
+        'con logo e contatti lunghi', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final temp = Directory.systemTemp.createTempSync('simple_order_brand_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      // Stessa larghezza utile del bottom sheet di dettaglio su uno schermo
+      // 320 px (320 - 2 × 20 di padding).
+      const brand = BrandProfile(
+        fullName: 'Andrea Morgante Colormeter Amministrazione Srl',
+        role: 'Tecnico Commerciale Senior Certificato',
+        phone1: '+39 333 1234567',
+        website: 'https://www.colormeter.it/strumenti',
+        emailPrimary: 'amministrazione.vendite@colormeter.it',
+      );
+      final withLogo = brand.copyWith(logoPath: _writePng(temp, 480, 240));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: <Widget>[
+                  BrandHeader(brand: withLogo, dense: true),
+                  const BrandHeader(brand: brand, dense: true),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settleLogoIo(tester);
+
+      expect(tester.takeException(), isNull, reason: 'logo 132×66 in 280 px');
+      final logos = find.byKey(const Key('brand-header-logo'));
+      expect(logos, findsOneWidget);
+      expect(tester.getSize(logos), const Size(132, 66));
+      // I contatti lunghi si comprimono (ellipsis) invece di sbordare.
+      final contacts = find.byKey(const Key('brand-header-contacts'));
+      expect(contacts, findsNWidgets(2));
+      expect(
+        tester.getSize(contacts.first).width,
+        lessThan(280),
+        reason: 'i contatti lunghi si comprimono con ellipsis',
+      );
+      expect(find.textContaining('Morgante'), findsNWidgets(2));
+    });
+  });
+
   group('Impostazioni → logo', () {
     testWidgets('"Carica logo" salva il file e mostra l\'anteprima', (
       WidgetTester tester,
@@ -382,9 +533,62 @@ void main() {
       expect(find.byKey(const Key('settings-brand-logo-remove')), findsNothing);
     });
 
+    testWidgets('il logo dell\'anteprima è 66 px (dense +50%) e non è stirato',
+        (
+      WidgetTester tester,
+    ) async {
+      final temp = Directory.systemTemp.createTempSync('simple_order_gallery_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      // Logo quadrato più grande dell'area riservata (che è 2:1): deve essere
+      // contenuto in 66×66, non allargato a 132×66 né ridotto a 44 come
+      // prima della modifica.
+      final picked = _writePng(temp, 240, 240);
+      _mockImagePicker(tester, () async => picked);
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo')));
+      await _settleLogoIo(tester);
+      await tester.enterText(
+        find.byKey(const Key('settings-brand-fullname')),
+        'Andrea Morgante',
+      );
+      await tester.pumpAndSettle();
+
+      final logo = _inPreview(find.byKey(const Key('brand-header-logo')));
+      expect(logo, findsOneWidget, reason: 'anteprima con immagine, non testo');
+      expect(
+        tester.getSize(logo),
+        const Size(66, 66),
+        reason: 'logo dense +50%: contenuto in 66×66 (era 44×44)',
+      );
+
+      // `BoxFit.contain` + allineamento a sinistra: nessuna distorsione.
+      final image = tester.widget<Image>(logo);
+      expect(image.fit, BoxFit.contain);
+      expect(image.alignment, Alignment.centerLeft);
+      expect(
+        applyBoxFit(BoxFit.contain, const Size(240, 240), const Size(132, 66))
+            .destination,
+        const Size(66, 66),
+        reason: 'un quadrato nell\'area 132×66 è contenuto, non stirato',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('nessun overflow a 360x640 con campi e logo lunghi', (
       WidgetTester tester,
     ) async {
+      final temp = Directory.systemTemp.createTempSync('simple_order_gallery_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      // Logo reale (non il fallback testuale): l'header con immagine deve
+      // stare in 360 px senza overflow.
+      final picked = _writePickablePng(temp, size: 240);
+      _mockImagePicker(tester, () async => picked);
+
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -393,6 +597,24 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Impostazioni'));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('settings-brand-logo')));
+      await _settleLogoIo(tester);
+
+      // Scorre fino all'anteprima: con logo reale l'header mostra
+      // l'immagine, non il testo di fallback.
+      final preview = find.byKey(const Key('settings-brand-preview'));
+      await _scrollUntilVisible(tester, preview);
+      expect(preview, findsOneWidget);
+      expect(
+        find.descendant(
+          of: preview,
+          matching: find.byKey(const Key('brand-header-logo')),
+        ),
+        findsOneWidget,
+        reason: 'l\'anteprima mostra l\'immagine, non il testo di fallback',
+      );
       expect(tester.takeException(), isNull);
 
       // Testi lunghi: l'header li tronca con ellipsis, senza overflow.
@@ -416,6 +638,7 @@ void main() {
         expect(tester.takeException(), isNull);
       }
       expect(find.byKey(const Key('settings-brand-preview')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('un logo non leggibile non rompe l\'anteprima', (

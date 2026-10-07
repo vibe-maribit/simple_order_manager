@@ -56,7 +56,12 @@ const BrandProfile _brandProfile = BrandProfile(
 );
 
 /// PNG piccolo ma valido, usato come logo su disco.
-Uint8List _logoBytes() => img.encodePng(img.Image(width: 24, height: 12));
+///
+/// Il default 24×12 ha rapporto 2:1: lo stesso rapporto dell'area riservata al
+/// marchio nell'header, quindi nel PDF l'altezza libera coincide con
+/// [DocumentPdfService.logoHeight].
+Uint8List _logoBytes({int width = 24, int height = 12}) =>
+    img.encodePng(img.Image(width: width, height: height));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -354,8 +359,11 @@ void main() {
       }
     });
 
-    Future<BrandProfile> brandWithLogoOnDisk(BrandLogoStore store) async {
-      final path = await store.save(_logoBytes());
+    Future<BrandProfile> brandWithLogoOnDisk(
+      BrandLogoStore store, {
+      Uint8List? bytes,
+    }) async {
+      final path = await store.save(bytes ?? _logoBytes());
       return _brandProfile.copyWith(logoPath: path);
     }
 
@@ -387,6 +395,69 @@ void main() {
 
       expect(content, contains('Morgante'));
       expect(content, contains('/Subtype/Image'));
+    });
+
+    test('il logo è stampato alto 72 pt con le proporzioni native', () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final brand = await brandWithLogoOnDisk(store);
+
+      expect(
+        DocumentPdfService.logoHeight,
+        72,
+        reason: 'logo +50%: 48 pt → 72 pt (circa 25,4 mm)',
+      );
+
+      final bytes = await DocumentPdfService.instance.buildBytes(
+        _order(),
+        brand: brand,
+      );
+      final content = String.fromCharCodes(bytes);
+
+      // Matrice di placement della fixture 24×12 (rapporto 2:1): larghezza
+      // 2 × altezza, altezza = logoHeight. Larghezza e altezza non vengono
+      // mai imposte indipendentemente, quindi il logo non viene distorto.
+      expect(
+        content,
+        contains('q 144 0 0 72 0 0 cm'),
+        reason: 'marchio 2:1 disegnato 144×72 pt, allineato a sinistra',
+      );
+      expect(
+        content,
+        isNot(contains('q 96 0 0 48')),
+        reason: 'le dimensioni precedenti (48 pt) non devono più comparire',
+      );
+
+      // Nessun ricampionamento: l'XObject conserva i pixel del file
+      // normalizzato su disco (stessa risoluzione, nessuno sgranamento a
+      // 84 px logici su dpr 3).
+      final onDisk = img.decodeImage((await store.read(brand.logoPath))!);
+      expect(onDisk, isNotNull);
+      expect(onDisk!.width, 24);
+      expect(onDisk.height, 12);
+      expect(
+        content,
+        contains('/Subtype/Image/Width 24/Height 12'),
+        reason: 'il PDF embedda il file così com\'è, senza riscalarlo',
+      );
+    });
+
+    test('un logo quadrato non viene allungato alla larghezza della colonna',
+        () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final brand = await brandWithLogoOnDisk(
+        store,
+        bytes: _logoBytes(width: 30, height: 30),
+      );
+
+      final content = String.fromCharCodes(
+        await DocumentPdfService.instance.buildBytes(_order(), brand: brand),
+      );
+
+      // `BoxFit.contain` su un'immagine 1:1: l'altezza vale logoHeight e la
+      // larghezza la segue (72×72), senza stiramento alla colonna (~257 pt).
+      expect(content, contains('q 72 0 0 72 0 0 cm'));
+      expect(content, isNot(contains('144 0 0 72')), reason: 'logo 1:1');
+      expect(content, contains('/Subtype/Image/Width 30/Height 30'));
     });
 
     test('un logo sparito dal disco non rompe l\'export', () async {
