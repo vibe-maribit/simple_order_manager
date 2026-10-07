@@ -1830,11 +1830,11 @@ class _OrdersTabState extends State<OrdersTab> {
                     : AppColors.outlineVariant,
               ),
               boxShadow: selected
-                  ? const [
+                  ? [
                       BoxShadow(
-                        color: Color(0x1F00288E),
+                        color: AppColors.primary.withValues(alpha: 0.12),
                         blurRadius: 6,
-                        offset: Offset(0, 2),
+                        offset: const Offset(0, 2),
                       ),
                     ]
                   : null,
