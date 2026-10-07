@@ -139,6 +139,26 @@ void main() {
           reason: 'non riempie la larghezza: sarebbe deformato');
     });
 
+    test('raster verticale 300×600 resta contenuto in 21,26 × 42,52 pt',
+        () async {
+      final path = await saveLogo(_png(300, 600));
+      final content = _pageContent(
+        await BrandCardPdfService().buildBytes(_brand(logoPath: path)),
+      );
+
+      // Contenimento verticale: altezza piena del box, larghezza = metà
+      // (rapporto 1:2 conservato, nessuna deformazione).
+      expect(content, contains('q 0 0 21.25984 $_boxH re W n'));
+      expect(content, contains('q 21.25984 0 0 $_boxH 0 0 cm /I'));
+      expect(content, contains(' Do Q'));
+      expect(
+        content,
+        isNot(contains('q $_boxW 0 0 $_boxH 0 0 cm')),
+        reason: 'non riempie la larghezza: sarebbe deformato',
+      );
+      expect(pxAt300Dpi(cardWidthMm), 1004);
+    });
+
     test('nessun upscaling: 50×50 px resta 12 × 12 pt', () async {
       final path = await saveLogo(_png(50, 50));
       final content = _pageContent(

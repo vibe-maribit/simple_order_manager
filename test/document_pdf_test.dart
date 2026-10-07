@@ -475,6 +475,34 @@ void main() {
       expect(content, contains('/Subtype/Image/Width 30/Height 30'));
     });
 
+    test('un logo verticale resta proporzionato all\'altezza 90 pt', () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final brand = await brandWithLogoOnDisk(
+        store,
+        bytes: _logoBytes(width: 12, height: 24),
+      );
+
+      final content = String.fromCharCodes(
+        await DocumentPdfService.instance.buildBytes(_order(), brand: brand),
+      );
+
+      // `BoxFit.contain` su un'immagine 1:2: l'altezza vale logoHeight e la
+      // larghezza la segue (45×90), allineata a sinistra, mai stirata alla
+      // colonna (~257 pt) né compressa.
+      expect(content, contains('q 45 0 0 90 0 0 cm'));
+      expect(
+        content,
+        isNot(contains('q 180 0 0 90 0 0 cm')),
+        reason: 'il logo verticale non può occupare 180 pt di larghezza',
+      );
+      expect(
+        content,
+        isNot(contains('q 90 0 0 90 0 0 cm')),
+        reason: 'non è quadrato',
+      );
+      expect(content, contains('/Subtype/Image/Width 12/Height 24'));
+    });
+
     test('un logo sparito dal disco non rompe l\'export', () async {
       final store = BrandLogoStore(directoryResolver: () async => directory);
       final brand = await brandWithLogoOnDisk(store);
