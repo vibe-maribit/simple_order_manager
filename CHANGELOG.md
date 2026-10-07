@@ -49,6 +49,23 @@ Nessuna modifica in corso.
   - `test/documents_ui_test.dart`: il bottom sheet di dettaglio a 360×640 con logo reale
     verifica l'area `132×66` e che logo e blocco contatti non si sovrappongano.
 
+### Fixed
+
+- Riparato il codice corrotto da un merge automatico precedente, che rendeva il progetto non
+  compilabile e di fatto impediva l'esecuzione di **tutta** la suite di test:
+  - `lib/main.dart`: rimossa una `),` duplicata nel bottom sheet di `_shareOrder` e un frammento
+    troncato e duplicato di `_handleSecondaryAction` (resta la sola implementazione, che per
+    `Approvato` / `Completato` genera il PDF e per `Bozza` / `In attesa` copia il riassunto);
+    ripristinato l'uso di `kClearSearchKey` sul bottone "Cancella ricerca".
+  - `test/documents_ui_test.dart`: rimosse le tre righe di import duplicate fuori ordine e
+    ricostruita la dichiarazione del test `"Condividi PDF" genera il PDF reale e ne apre
+    l'anteprima`, il cui corpo era rimasto orfano nel file. Il test `"Condividi PDF" copia il
+    riepilogo e conferma con snackbar`, introdotto dallo stesso merge e in contrasto con il
+    comportamento documentato (CHANGELOG 1.3.0 e README: `Condividi PDF` genera il PDF, non
+    copia negli appunti), è stato rimosso.
+- Link di riferimento delle sezioni release: aggiunto `[1.5.1]` e corretto `[Unreleased]`, che
+  puntava ancora a `v1.5.0`.
+
 ## [1.5.0] - 2026-10-06
 
 ### Added
@@ -215,7 +232,8 @@ Nessuna modifica in corso.
 - Dashboard con tab `Preventivi/Ordini`, `Clienti` e `Catalogo`.
 - Pipeline GitHub Actions per build e pubblicazione dell'APK Android di release.
 
-[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...v1.3.0

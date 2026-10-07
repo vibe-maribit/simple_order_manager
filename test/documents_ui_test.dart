@@ -1,6 +1,3 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -684,11 +681,12 @@ void main() {
     });
   });
 
-  group('Azioni secondarie → appunti', () {
-    testWidgets('"Condividi PDF" copia il riepilogo e conferma con snackbar', (
+  group('Azioni secondarie → PDF', () {
+    testWidgets('"Condividi PDF" genera il PDF reale e ne apre l\'anteprima', (
       WidgetTester tester,
     ) async {
-      _mockClipboard(tester);
+      final shareCalls = _mockSharePlus(tester);
+      _mockPrinting(tester);
       await _pumpDocumentsTab(tester, _buildOrders());
       await _openCard(tester, 'kpi-ord-1');
       await tester.pumpAndSettle();
@@ -697,20 +695,6 @@ void main() {
       await tester.tap(
         find.byKey(const Key('documents-secondary-action-kpi-ord-1')),
       );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Riassunto di ORD-2026-201 copiato'), findsOneWidget);
-      final stored = await Clipboard.getData(Clipboard.kTextPlain);
-      expect(stored?.text, isNotNull);
-      final text = stored!.text!;
-      expect(text, contains('ORD-2026-201'));
-      expect(text, contains('Cliente Gamma'));
-      expect(text, contains('03 ott 2026'));
-      expect(text, contains('€ 300,00'));
-      expect(text, contains('IVA inc.'));
-      expect(text, contains('Voci: 1'));
-    });
-
       await _settleExport(tester);
 
       // La schermata di anteprima renderizza il file appena scritto.

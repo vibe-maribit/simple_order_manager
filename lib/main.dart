@@ -509,6 +509,7 @@ class OrdersTab extends StatefulWidget {
 /// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
 /// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
 void _noopBrandChange(BrandProfile brand) {}
+
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
   tutti('Tutti'),
@@ -528,7 +529,6 @@ enum _DocumentFilter {
       };
 }
 
-
 /// Frazione di larghezza occupata da ogni KPI card nel carousel orizzontale.
 const double kKpiCardExtentFactor = 0.78;
 
@@ -544,7 +544,6 @@ class _SnapScrollBehavior extends ScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) =>
       const PageScrollPhysics();
 }
-
 
 /// Importo formattato con separatori italiani e simbolo euro (`€ 1.234,56`).
 ///
@@ -568,6 +567,7 @@ class _OrdersTabState extends State<OrdersTab> {
   static const Key kBannerCtaKey = Key('documents-banner-cta');
   static const Key kBannerKey = Key('documents-banner');
   static const Key kKpiCarouselKey = Key('documents-kpi-carousel');
+
   /// Prefissi delle azioni secondarie per chiave di test.
   static String secondaryActionKey(String orderId) =>
       'documents-secondary-action-$orderId';
@@ -712,19 +712,6 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
-  /// Azione secondaria della card: copia sempre il riassunto negli appunti,
-  /// poi apre il flusso dedicato allo stato del documento.
-  Future<void> _handleSecondaryAction(WorkOrder order) async {
-    await _copyDocumentSummary(order);
-    if (!mounted) return;
-    switch (order.status) {
-      case OrderStatus.inAttesa:
-        _trackShipment(order);
-      case OrderStatus.bozza:
-        _shareOrder(order);
-      case OrderStatus.approvato:
-      case OrderStatus.completato:
-        break;
   /// Cliente della rubrica associato al documento, se presente.
   Client? _clientFor(WorkOrder order) {
     for (final client in widget.clients) {
@@ -862,7 +849,6 @@ class _OrdersTabState extends State<OrdersTab> {
                     _exportDocumentPdf(order);
                   },
                 ),
-              ),
               ),
               const SizedBox(height: AppSpacing.spaceMd),
               Row(
@@ -1548,6 +1534,7 @@ class _OrdersTabState extends State<OrdersTab> {
           suffixIcon: _searchQuery.isEmpty
               ? null
               : IconButton(
+                  key: kClearSearchKey,
                   icon: const Icon(Icons.close, size: 18),
                   tooltip: 'Cancella ricerca',
                   onPressed: _clearSearch,
