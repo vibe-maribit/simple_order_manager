@@ -23,6 +23,14 @@ dependencies:
   printing: ^5.14.3
   share_plus: ^11.1.0
   shared_preferences: ^2.2.2
+  # Client SMTP per l'invio dei preventivi (Impostazioni → Posta in uscita).
+  # Alternativa a `mailer` (indicato nel piano): **nessuna** release di
+  # `mailer` è compatibile con Flutter 3.27.4 / Dart 3.6 — la 6.x richiede
+  # SDK `<3.0.0`, la 7.x (via `punycoder`) `>=3.7.2`. `enough_mail` 2.1.6
+  # dichiara `>=2.19.0 <4.0.0`: SMTP + MIME + allegati in Dart puro
+  # (`dart:io`, nessun plugin di piattaforma). Pin esatto (stessa policy di
+  # image_picker/file_picker).
+  enough_mail: 2.1.6
 
 dev_dependencies:
   flutter_test:

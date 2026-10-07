@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/documents/document_pdf.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/services/smtp_email_service.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_settings_screen.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -34,6 +36,9 @@ class StorageService {
 
   /// Profilo del mittente: JSON con logo (solo path) e contatti.
   static const _keyBrand = 'simple_orders_brand_v1';
+
+  /// Configurazione SMTP (posta in uscita): JSON con credenziali locali.
+  static const _keySmtp = 'simple_orders_smtp_v1';
 
   static Future<List<Client>> loadClients() async {
     final prefs = await SharedPreferences.getInstance();
@@ -117,6 +122,36 @@ class StorageService {
   static Future<void> saveBrand(BrandProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBrand, jsonEncode(profile.toJson()));
+  }
+
+  /// Legge la configurazione SMTP della sezione "Posta in uscita".
+  ///
+  /// Come per il brand **non esiste un seed**: chiave assente, stringa vuota
+  /// o JSON corrotto ⇒ [EmailSmtpConfig.empty] (nessuna configurazione, stato
+  /// valido: l'app usa la condivisione nativa), senza eccezioni.
+  static Future<EmailSmtpConfig> loadSmtpConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySmtp);
+    if (raw == null || raw.isEmpty) return EmailSmtpConfig.empty;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return EmailSmtpConfig.fromJson(json);
+    } catch (_) {
+      return EmailSmtpConfig.empty;
+    }
+  }
+
+  /// Salva la configurazione SMTP (credenziali incluse: storage locale del
+  /// dispositivo, vedi [EmailSmtpConfig]).
+  static Future<void> saveSmtpConfig(EmailSmtpConfig config) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySmtp, jsonEncode(config.toJson()));
+  }
+
+  /// Elimina la configurazione SMTP ("Rimuovi configurazione" nella UI).
+  static Future<void> clearSmtpConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keySmtp);
   }
 
   static List<Client> _seedClients() {
@@ -284,6 +319,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   /// Dati del mittente (logo + contatti) usati dall'header dei documenti.
   BrandProfile _brand = BrandProfile.empty;
 
+  /// Configurazione SMTP della sezione "Posta in uscita": se valida abilita
+  /// l'invio dei documenti via email, altrimenti l'app resta sulle azioni
+  /// native (condivisione PDF).
+  EmailSmtpConfig _smtpConfig = EmailSmtpConfig.empty;
+
   @override
   void initState() {
     super.initState();
@@ -291,18 +331,20 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    // Le quattro letture sono indipendenti: girano in parallelo così il primo
-    // avvio non somma i tempi delle quattro chiamate.
+    // Le letture sono indipendenti: girano in parallelo così il primo
+    // avvio non somma i tempi delle chiamate.
     final loaded = await Future.wait(<Future<Object>>[
       StorageService.loadClients(),
       StorageService.loadCatalog(),
       StorageService.loadOrders(),
       StorageService.loadBrand(),
+      StorageService.loadSmtpConfig(),
     ]);
     final clients = loaded[0] as List<Client>;
     final catalog = loaded[1] as List<CatalogItem>;
     final orders = loaded[2] as List<WorkOrder>;
     final brand = loaded[3] as BrandProfile;
+    final smtpConfig = loaded[4] as EmailSmtpConfig;
 
     if (mounted) {
       setState(() {
@@ -310,6 +352,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         _catalog = catalog;
         _orders = orders;
         _brand = brand;
+        _smtpConfig = smtpConfig;
         _isLoading = false;
       });
     }
@@ -407,6 +450,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     _saveBrand();
   }
 
+  // --- SMTP Actions ---
+  /// Persiste la posta in uscita: stesso pattern del brand (stato + salvataggio
+  /// immediato), così il pit stop tra Impostazioni e Documenti non perde dati.
+  void _updateSmtpConfig(EmailSmtpConfig config) {
+    setState(() => _smtpConfig = config);
+    StorageService.saveSmtpConfig(config);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -419,9 +470,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         clients: _clients,
         catalog: _catalog,
         brand: _brand,
+        smtpConfig: _smtpConfig,
         onSaveOrder: _addOrUpdateOrder,
         onDeleteOrder: _deleteOrder,
         onStatusChange: _updateOrderStatus,
+        onOpenSettings: () => setState(() => _currentIndex = 3),
       ),
       ClientsTab(
         clients: _clients,
@@ -436,6 +489,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       SettingsTab(
         brand: _brand,
         onBrandChange: _updateBrand,
+        smtpConfig: _smtpConfig,
+        onSmtpConfigChange: _updateSmtpConfig,
       ),
     ];
 
@@ -490,6 +545,18 @@ class OrdersTab extends StatefulWidget {
   /// Callback usato dalla tab Impostazioni per propagare il profile aggiornato.
   final ValueChanged<BrandProfile> onBrandChange;
 
+  /// Configurazione SMTP corrente: quando valida la scheda documento e il
+  /// foglio "Invia per firma" propongono l'invio via email con PDF allegato,
+  /// altrimenti resta la sola condivisione nativa.
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza configurazione l'app si comporta come prima.
+  final EmailSmtpConfig smtpConfig;
+
+  /// Porta alla tab Impostazioni: usato dai fogli Documenti quando la posta
+  /// in uscita non è configurata, come invito a settare il server SMTP.
+  final VoidCallback onOpenSettings;
+
   const OrdersTab({
     super.key,
     required this.orders,
@@ -500,6 +567,8 @@ class OrdersTab extends StatefulWidget {
     required this.onStatusChange,
     this.brand = BrandProfile.empty,
     this.onBrandChange = _noopBrandChange,
+    this.smtpConfig = EmailSmtpConfig.empty,
+    this.onOpenSettings = _noopOpenSettings,
   });
 
   @override
@@ -509,6 +578,10 @@ class OrdersTab extends StatefulWidget {
 /// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
 /// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
 void _noopBrandChange(BrandProfile brand) {}
+
+/// Callback neutro per [OrdersTab.onOpenSettings]: nei test la tab non ha un
+/// shell a cui tornare, l'azione resta senza effetto.
+void _noopOpenSettings() {}
 
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
@@ -769,6 +842,115 @@ class _OrdersTabState extends State<OrdersTab> {
     }
   }
 
+  // ==========================================
+  // EMAIL (POSTA IN USCITA)
+  // ===================================
+
+  /// Genera il PDF del documento per l'allegato dell'email, **senza** aprirne
+  /// l'anteprima né attivare la condivisione nativa.
+  ///
+  /// Usa lo stesso lock di [_exportDocumentPdf]: due generazioni concorrenti
+  /// sullo stesso file sarebbero una corsa.
+  Future<File?> _exportPdfForEmail(WorkOrder order) async {
+    if (_pdfExportRunning) return null;
+    _pdfExportRunning = true;
+    try {
+      final result = await DocumentPdfService.instance.export(
+        order,
+        client: _clientFor(order),
+        brand: widget.brand,
+      );
+      return result.file;
+    } finally {
+      _pdfExportRunning = false;
+    }
+  }
+
+  /// Prepara e invia il messaggio: allegato PDF (opzionale) + sessione SMTP.
+  ///
+  /// Nessuna eccezione arriva alla UI: ogni problema diventa un
+  /// [EmailSendResult] negativo con messaggio leggibile.
+  Future<EmailSendResult> _sendDocumentEmail(
+    WorkOrder order, {
+    required String recipient,
+    required String subject,
+    required String body,
+    required bool attachPdf,
+  }) async {
+    File? pdfFile;
+    if (attachPdf) {
+      try {
+        pdfFile = await _exportPdfForEmail(order);
+      } on Object catch (error) {
+        return EmailSendResult.failure('Generazione PDF non riuscita: $error');
+      }
+      if (pdfFile == null) {
+        return const EmailSendResult.failure(
+          'Generazione PDF in corso in un\'altra scheda: riprova tra un '
+          'attimo.',
+        );
+      }
+    }
+    return SmtpEmailService.instance.sendQuote(
+      config: widget.smtpConfig,
+      order: order,
+      brand: widget.brand,
+      client: _clientFor(order),
+      recipient: recipient,
+      pdfFile: pdfFile,
+      subject: subject,
+      body: body,
+    );
+  }
+
+  /// Sheet di composizione: destinatario (prefill dalla rubrica), oggetto e
+  /// testo precompilati dal documento, opzione "Allega PDF".
+  ///
+  /// Il fallback resta la condivisione nativa: questo sheet compare solo
+  /// quando la posta in uscita è configurata ([OrdersTab.smtpConfig]).
+  Future<void> _openEmailComposer(WorkOrder order) async {
+    final client = _clientFor(order);
+    final outcome = await showDialog<(EmailSendResult, String)>(
+      context: context,
+      builder: (_) => _EmailComposeDialog(
+        orderNumber: order.orderNumber,
+        endpoint: widget.smtpConfig.endpoint,
+        config: widget.smtpConfig,
+        initialRecipient: (client?.email ?? '').trim(),
+        initialSubject: SmtpEmailService.defaultSubject(order),
+        initialBody: SmtpEmailService.defaultBody(
+          order,
+          brand: widget.brand,
+          client: client,
+        ),
+        pdfFileName: DocumentPdfService.fileNameFor(order, client: client),
+        submit: (recipient, subject, body, attachPdf) => _sendDocumentEmail(
+          order,
+          recipient: recipient,
+          subject: subject,
+          body: body,
+          attachPdf: attachPdf,
+        ),
+      ),
+    );
+    if (!mounted || outcome == null) return; // annullato dall'utente
+    final result = outcome.$1;
+    final sent = result.success;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: Key(
+          sent ? 'documents-email-sent-snackbar' : 'documents-email-error',
+        ),
+        backgroundColor: sent ? null : AppColors.error,
+        content: Text(
+          sent
+              ? 'Email inviata a ${outcome.$2}'
+              : (result.errorMessage ?? 'Invio non riuscito.'),
+        ),
+      ),
+    );
+  }
+
   /// Azione secondaria della card: per bozza e documento in attesa copia il
   /// riassunto e apre il flusso dedicato; per i documenti approvati o
   /// completati genera il PDF reale e lo condivide.
@@ -838,6 +1020,59 @@ class _OrdersTabState extends State<OrdersTab> {
               const SizedBox(height: AppSpacing.spaceMd),
               _buildSummaryBlock(order),
               const SizedBox(height: AppSpacing.spaceMd),
+              if (widget.smtpConfig.isValid()) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('documents-sign-send-email'),
+                    icon: const Icon(Icons.mail_outline, size: 18),
+                    label: const Text('Invia via email'),
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _openEmailComposer(order);
+                    },
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceMd),
+              ] else ...[
+                // Posta in uscita non configurata o incompleta: l'azione
+                // resta visibile ma disabilitata, con l'invito esplicito a
+                // impostarla (nessun invio senza una config valida).
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('documents-sign-send-email-disabled'),
+                    icon: const Icon(Icons.mail_outline, size: 18),
+                    label: const Text('Invia via email'),
+                    onPressed: null,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceXs),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        key: const Key('documents-sign-smtp-hint'),
+                        widget.smtpConfig.isEmpty
+                            ? 'Posta in uscita da configurare.'
+                            : 'Posta in uscita non valida: controlla i campi.',
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('documents-sign-open-settings'),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        widget.onOpenSettings();
+                      },
+                      child: const Text('Vai a Impostazioni'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.spaceSm),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -2146,6 +2381,60 @@ class _OrdersTabState extends State<OrdersTab> {
                     },
                   ),
                 ),
+                if (widget.smtpConfig.isValid()) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const Key('documents-detail-send-email'),
+                      icon: const Icon(Icons.mail_outline),
+                      label: const Text('Invia via email'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openEmailComposer(order);
+                      },
+                    ),
+                  ),
+                ] else ...[
+                  // Stesso invito del foglio "Invia per firma": senza una
+                  // configurazione valida l'invio via email è disabilitato
+                  // e si rimanda alle Impostazioni.
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const Key('documents-detail-send-email-disabled'),
+                      icon: const Icon(Icons.mail_outline),
+                      label: const Text('Invia via email'),
+                      onPressed: null,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          key: const Key('documents-detail-smtp-hint'),
+                          widget.smtpConfig.isEmpty
+                              ? 'Posta in uscita da configurare.'
+                              : 'Posta in uscita non valida: controlla i campi.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        key: const Key('documents-detail-open-settings'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          widget.onOpenSettings();
+                        },
+                        child: const Text('Vai a Impostazioni'),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -3464,6 +3753,219 @@ class _CatalogTabState extends State<CatalogTab> {
                 style: TextStyle(color: AppColors.onPrimary)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Dialog di composizione email: possiede i controller (niente errori del
+/// tipo "TextEditingController used after being disposed" quando la route del
+/// dialog esce ancora a schermo) e gestisce stato di invio, validazione
+/// inline di destinatario e configurazione.
+class _EmailComposeDialog extends StatefulWidget {
+  const _EmailComposeDialog({
+    required this.orderNumber,
+    required this.endpoint,
+    required this.config,
+    required this.initialRecipient,
+    required this.initialSubject,
+    required this.initialBody,
+    required this.pdfFileName,
+    required this.submit,
+  });
+
+  final String orderNumber;
+
+  /// Etichetta già pronta del server (host:porta), mostrata come conferma.
+  final String endpoint;
+
+  final EmailSmtpConfig config;
+  final String initialRecipient;
+  final String initialSubject;
+  final String initialBody;
+  final String pdfFileName;
+
+  /// Avvio dell'invio vero e proprio; la dialog si chiude con l'esito
+  /// assieme al destinatario usato (per il messaggio di conferma).
+  final Future<EmailSendResult> Function(
+    String recipient,
+    String subject,
+    String body,
+    bool attachPdf,
+  ) submit;
+
+  @override
+  State<_EmailComposeDialog> createState() => _EmailComposeDialogState();
+}
+
+class _EmailComposeDialogState extends State<_EmailComposeDialog> {
+  late final TextEditingController _recipient;
+  late final TextEditingController _subject;
+  late final TextEditingController _body;
+  var _attachPdf = true;
+  var _sending = false;
+  var _recipientInvalid = false;
+  String? _configError;
+
+  @override
+  void initState() {
+    super.initState();
+    _recipient = TextEditingController(text: widget.initialRecipient);
+    _subject = TextEditingController(text: widget.initialSubject);
+    _body = TextEditingController(text: widget.initialBody);
+    // Configurazione non valida: il messaggio resta visibile e l'invio è
+    // disabilitato (difesa in profondità: l'apertura è già gated a valle).
+    _configError = SmtpEmailService.invalidReason(widget.config);
+  }
+
+  @override
+  void dispose() {
+    _recipient.dispose();
+    _subject.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final to = _recipient.text.trim();
+    final invalid = SmtpEmailService.invalidReason(widget.config);
+    if (invalid != null || !EmailSmtpConfig.isValidEmail(to)) {
+      setState(() {
+        _configError = invalid;
+        _recipientInvalid = !EmailSmtpConfig.isValidEmail(to);
+      });
+      return;
+    }
+    setState(() => _sending = true);
+    final outcome =
+        await widget.submit(to, _subject.text, _body.text, _attachPdf);
+    if (!mounted) return;
+    Navigator.of(context).pop<(EmailSendResult, String)>(
+      (outcome, to),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(AppRadii.xl),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.spaceLg,
+          right: AppSpacing.spaceLg,
+          top: AppSpacing.spaceLg,
+          bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.spaceLg,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Invia via email · ${widget.orderNumber}',
+                style: AppTextStyles.headlineSm.copyWith(
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceSm),
+              Text(
+                'Server ${widget.endpoint} · '
+                '${_attachPdf ? 'con PDF allegato' : 'senza allegato'}',
+                style: AppTextStyles.bodySm.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
+              TextField(
+                key: const Key('documents-email-recipient'),
+                controller: _recipient,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: InputDecoration(
+                  labelText: 'Destinatario',
+                  hintText: 'cliente@esempio.it',
+                  errorText: _recipientInvalid
+                      ? 'Indirizzo non valido: controlla email e spazi.'
+                      : null,
+                ),
+                onChanged: (_) {
+                  if (_recipientInvalid) {
+                    setState(() => _recipientInvalid = false);
+                  }
+                },
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
+              TextField(
+                key: const Key('documents-email-subject'),
+                controller: _subject,
+                decoration: const InputDecoration(labelText: 'Oggetto'),
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
+              TextField(
+                key: const Key('documents-email-body'),
+                controller: _body,
+                minLines: 4,
+                maxLines: 8,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Messaggio'),
+              ),
+              const SizedBox(height: AppSpacing.spaceSm),
+              CheckboxListTile(
+                key: const Key('documents-email-attach'),
+                value: _attachPdf,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('Allega il PDF del documento'),
+                subtitle: Text(widget.pdfFileName),
+                onChanged: _sending
+                    ? null
+                    : (value) => setState(() => _attachPdf = value ?? true),
+              ),
+              if (_configError != null) ...[
+                const SizedBox(height: AppSpacing.spaceXs),
+                Text(
+                  _configError!,
+                  style: AppTextStyles.bodySm.copyWith(color: AppColors.error),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.spaceMd),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('documents-email-cancel'),
+                      onPressed:
+                          _sending ? null : () => Navigator.of(context).pop(),
+                      child: const Text('Annulla'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.gutter),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      key: const Key('documents-email-send'),
+                      icon: _sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send, size: 18),
+                      label: Text(_sending ? 'Invio…' : 'Invia'),
+                      onPressed: (_sending ||
+                              SmtpEmailService.invalidReason(widget.config) !=
+                                  null)
+                          ? null
+                          : _submit,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

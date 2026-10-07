@@ -33,6 +33,9 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
     (genera il PDF, apre l'anteprima e permette la condivisione).
   - Pulsante **Genera PDF e condividi** anche nel bottom sheet di dettaglio del documento, che apre
     con l'intestazione brand in cima (logo + nome e contatti del mittente).
+  - **Invio via email** dal foglio "Invia per firma" e dal bottom sheet di dettaglio: destinatario,
+    oggetto, corpo precompilato e allegato PDF. Se la posta in uscita non è ancora configurata (o
+    non è valida) il pulsante resta disabilitato e il foglio rimanda a **Impostazioni**.
 - **Tab "Impostazioni" → Profilo / Brand**:
   - Logo del mittente caricato dalla galleria o come file **SVG**: i raster vengono normalizzati
     (PNG, lato massimo 2048 px, nessun upscaling) e salvati in `<appDocuments>/brand/logo.png`,
@@ -50,6 +53,12 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
   - Anteprima **live** dell'intestazione: ciò che si vede qui è ciò che viene stampato nel PDF.
   - I dati sono salvati immediatamente in locale e ricaricati all'avvio dell'app; senza profilo
     l'intestazione ripiega sul nome dell'app (`Simple Order Manager`).
+- **Tab "Impostazioni" → Posta in uscita (SMTP)**:
+  - Configurazione di un server SMTP (host, porta, utente, password, mittente, TLS, auth e
+    timeout) per l'invio dei preventivi via email, salvata immediatamente in locale.
+  - Sezione collassabile con **validazione inline** (porta e indirizzo mittente), pulsante
+    **Salva** con esito a schermo e **Test connessione** che verifica la autenticazione
+    senza inviare messaggi (disabilitato finché la configurazione non è valida).
 - **Persistenza Offline Garantita**:
   - Salvataggio automatico locale in formato JSON tramite `shared_preferences`.
   - Nessuna dipendenza da server esterni o database cloud: funzionamento 100% offline.

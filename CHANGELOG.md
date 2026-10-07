@@ -12,6 +12,38 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ### Added
 
+- **Client SMTP per inviare i preventivi via email** (`enough_mail: 2.1.6`):
+  - `lib/models/models.dart`: nuovo `EmailSmtpConfig` (host, porta, utente, password,
+    mittente `fromEmail`/`fromName`, TLS `secure`, flag `auth`, timeout) con
+    `isValid`/`isEmpty`/`isValidEmail`, `toJson`/`fromJson` tollerante (chiavi
+    alternative `host`/`smtpHost` ecc.) e `copyWith`.
+  - `lib/services/smtp_email_service.dart` (nuovo): `SmtpEmailService` con
+    `testConnection`, `sendQuote` (corpo testo + allegato PDF) e `invalidReason`
+    (`_sanitize`/`describeError`); la password non viene mai loggata e
+    `isLogEnabled` resta `false`.
+  - Persistenza: `StorageService.loadSmtpConfig`/`saveSmtpConfig`/`clearSmtpConfig`
+    sotto la chiave `simple_orders_smtp_v1` in `shared_preferences`, inizializzata in
+    `main()`.
+  - `lib/settings/brand_settings_screen.dart`: sezione **Posta in uscita (SMTP)**
+    collassabile (riepilogo `settings-smtp-collapsed-summary`) con campi host, porta,
+    utente, password, mittente, TLS, auth e timeout; **validazione inline** di porta
+    (1–65535) e indirizzo mittente, **salvataggio immediato** con pulsante **Salva**
+    (`settings-smtp-save` → snackbar `settings-smtp-saved-snackbar`, o
+    `settings-smtp-save-invalid` se la configurazione è presente ma non utilizzabile),
+    **Test connessione** disabilitato quando `!isValid()` (con motivo
+    `settings-smtp-invalid-reason`) e **Rimuovi configurazione**. Il campo "Da" viene
+    precompilato dall'email principale del brand.
+  - `lib/main.dart`: invio dalla tab **Documenti**, dal foglio "Invia per firma" e dal
+    bottom sheet di dettaglio, con `_EmailComposeDialog` (destinatario, oggetto, corpo
+    e allegato PDF). Senza una configurazione valida l'azione resta **disabilitata**
+    (`documents-sign/detail-send-email-disabled`) con invito
+    `documents-sign/detail-smtp-hint` e link **"Vai a Impostazioni"**
+    (`documents-sign/detail-open-settings`, tramite il nuovo callback
+    `OrdersTab.onOpenSettings`); il compose dialog blocca l'invio se la configurazione
+    diventa non valida (`SmtpEmailService.invalidReason`).
+  - Test: `test/smtp_config_test.dart` (modello, persistenza, validazione, testi e
+    sessione SMTP reale su `test/fake_smtp_server.dart`) e `test/smtp_ui_test.dart`
+    (sezione impostazioni, gates e inviti nei fogli Documenti) — 41 test.
 - **Template "biglietto da visita" 85 × 55 mm** condiviso dai documenti:
   - `lib/documents/pdf_layout.dart` (nuovo): costanti del template
     (`cardWidthMm` 85, `cardHeightMm` 55, `logoBoxWidthMm` 25, `logoBoxHeightMm` 15,

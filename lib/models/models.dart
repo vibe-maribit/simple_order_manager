@@ -495,3 +495,205 @@ class BrandProfile {
     );
   }
 }
+
+/// Configurazione del server SMTP usato per inviare i documenti (preventivi)
+/// in uscita, direttamente dall'app.
+///
+/// La configurazione resta **sul dispositivo**: viene serializzata in chiaro
+/// in `SharedPreferences` come il resto dei dati locali dell'app (logo,
+/// anagrafiche), senza alcun vault di sistema. Per questo la password:
+/// - non viene mai scritta nei log né nei messaggi di errore;
+/// - nella UI compare solo nel campo offuscato (`obscureText`) con toggle
+///   "mostra/nascondi";
+/// - resta comunque leggibile a chi abbia accesso allo storage dell'app, un
+///   limite documentato nella sezione Impostazioni.
+///
+/// [secure] `true` = connessione SSL/TLS immediata (tipicamente porta 465);
+/// `false` = connessione in chiaro iniziale con upgrade opportunistico
+/// STARTTLS, se il server lo dichiara (tipicamente porta 587).
+class EmailSmtpConfig {
+  /// Host del server SMTP, es. `smtp.gmail.com` (obbligatorio).
+  final String host;
+
+  /// Porta del server SMTP, 1-65535 (587 predefinita).
+  final int port;
+
+  /// Utente per l'autenticazione (spesso l'indirizzo email).
+  final String username;
+
+  /// Password SMTP (o "app password" per Gmail/Outlook). Sensibile: vedi
+  /// le note sulla classe.
+  final String password;
+
+  /// Indirizzo `From` dei messaggi inviati (obbligatorio).
+  final String fromEmail;
+
+  /// Nome mostrato come mittente, es. `Andrea Morgante` (opzionale).
+  final String fromName;
+
+  /// `true` ⇒ SSL implicito dalla connessione (porta 465);
+  /// `false` ⇒ STARTTLS opportunistico se supportato dal server.
+  final bool secure;
+
+  /// `true` ⇒ il server richiede autenticazione (serve username/password).
+  final bool auth;
+
+  /// Timeout di connessione/invio in secondi (predefinito 30).
+  final int timeoutSeconds;
+
+  const EmailSmtpConfig({
+    this.host = '',
+    this.port = 587,
+    this.username = '',
+    this.password = '',
+    this.fromEmail = '',
+    this.fromName = '',
+    this.secure = false,
+    this.auth = true,
+    this.timeoutSeconds = 30,
+  });
+
+  /// Configurazione vuota: nessun account SMTP configurato (stato valido,
+  /// non un errore: l'app ripiega sulla condivisione nativa del PDF).
+  static const EmailSmtpConfig empty = EmailSmtpConfig();
+
+  /// Porte SMTP più comuni, usate come suggerimento nella UI.
+  static const List<int> commonPorts = <int>[25, 465, 587, 2525];
+
+  /// `true` quando nessun campo è stato compilato.
+  bool get isEmpty =>
+      host.trim().isEmpty &&
+      username.trim().isEmpty &&
+      password.isEmpty &&
+      fromEmail.trim().isEmpty &&
+      fromName.trim().isEmpty;
+
+  bool get isNotEmpty => !isEmpty;
+
+  /// Timeout come [Duration], usato dal servizio SMTP.
+  Duration get timeout =>
+      Duration(seconds: timeoutSeconds < 1 ? 30 : timeoutSeconds);
+
+  /// Endpoint mostrato nei riepiloghi, es. `smtp.example.it:587`.
+  String get endpoint {
+    final h = host.trim();
+    return h.isEmpty ? '—' : '$h:$port';
+  }
+
+  /// Validazione sintattica **base** di un indirizzo email: serve a
+  /// intercettare refusi nei campi, non a sostituire una verifica RFC 5322.
+  static bool isValidEmail(String value) {
+    final v = value.trim();
+    if (v.isEmpty || v.length > 254) return false;
+    if (v.contains(' ') || v.contains('\n') || v.contains('\t')) return false;
+    final at = v.indexOf('@');
+    if (at <= 0 || at != v.lastIndexOf('@')) return false;
+    final domain = v.substring(at + 1);
+    final dot = domain.lastIndexOf('.');
+    // Dominio con almeno un punto e TLD non vuota (`a@b.it`, non `a@b`).
+    if (dot <= 0 || dot == domain.length - 1) return false;
+    return !v.startsWith('.') && !v.endsWith('.');
+  }
+
+  /// Configurazione utilizzabile per un invio reale.
+  ///
+  /// Regole minime:
+  /// - host non vuoto e senza spazi;
+  /// - porta nell'intervallo 1-65535;
+  /// - `fromEmail` presente e sintatticamente valido;
+  /// - se il server richiede autenticazione, username e password compilati;
+  /// - timeout positivo.
+  bool isValid() {
+    final h = host.trim();
+    if (h.isEmpty || h.contains(' ')) return false;
+    if (port < 1 || port > 65535) return false;
+    if (timeoutSeconds < 1) return false;
+    if (!isValidEmail(fromEmail)) return false;
+    if (auth && (username.trim().isEmpty || password.isEmpty)) return false;
+    return true;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'host': host,
+        'port': port,
+        'username': username,
+        'password': password,
+        'fromEmail': fromEmail,
+        'fromName': fromName,
+        'secure': secure,
+        'auth': auth,
+        'timeoutSeconds': timeoutSeconds,
+      };
+
+  /// Parsing **tollerante**: una chiave assente o di tipo errato (JSON
+  /// scritto a mano o da una versione precedente) non lancia eccezioni, ma
+  /// ricade sui valori predefiniti di costruzione.
+  factory EmailSmtpConfig.fromJson(Map<String, dynamic> json) {
+    String text(Object? value) => value is String ? value : '';
+    int integer(Object? value, int fallback) => value is num
+        ? value.toInt()
+        : (value is String ? int.tryParse(value) ?? fallback : fallback);
+    bool flag(Object? value, bool fallback) => value is bool ? value : fallback;
+    return EmailSmtpConfig(
+      host: text(json['host']),
+      port: integer(json['port'], 587),
+      username: text(json['username']),
+      password: text(json['password']),
+      fromEmail: text(json['fromEmail']),
+      fromName: text(json['fromName']),
+      secure: flag(json['secure'], false),
+      auth: flag(json['auth'], true),
+      timeoutSeconds: integer(json['timeoutSeconds'], 30),
+    );
+  }
+
+  EmailSmtpConfig copyWith({
+    String? host,
+    int? port,
+    String? username,
+    String? password,
+    String? fromEmail,
+    String? fromName,
+    bool? secure,
+    bool? auth,
+    int? timeoutSeconds,
+  }) {
+    return EmailSmtpConfig(
+      host: host ?? this.host,
+      port: port ?? this.port,
+      username: username ?? this.username,
+      password: password ?? this.password,
+      fromEmail: fromEmail ?? this.fromEmail,
+      fromName: fromName ?? this.fromName,
+      secure: secure ?? this.secure,
+      auth: auth ?? this.auth,
+      timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is EmailSmtpConfig &&
+      other.host == host &&
+      other.port == port &&
+      other.username == username &&
+      other.password == password &&
+      other.fromEmail == fromEmail &&
+      other.fromName == fromName &&
+      other.secure == secure &&
+      other.auth == auth &&
+      other.timeoutSeconds == timeoutSeconds;
+
+  @override
+  int get hashCode => Object.hash(
+        host,
+        port,
+        username,
+        password,
+        fromEmail,
+        fromName,
+        secure,
+        auth,
+        timeoutSeconds,
+      );
+}

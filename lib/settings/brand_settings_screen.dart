@@ -1,8 +1,13 @@
-/// Pannello "Impostazioni → Profilo / Brand".
+/// Pannello "Impostazioni → Profilo / Brand" e "Posta in uscita (SMTP)".
 ///
 /// Compila i dati del mittente (logo, nome e cognome, ruolo, telefoni, sito
 /// web, email) che alimentano l'header dei documenti: anteprima a schermo e
 /// PDF usano lo stesso blocco, qui mostrato in anteprima live.
+///
+/// Il blocco "Posta in uscita" configura il server SMTP usato per inviare i
+/// documenti via email (Impostazioni → Posta in uscita, invio dalla tab
+/// Documenti): host, porta, credenziali, indirizzo `From`, TLS, autenticazione
+/// e timeout, con prova di connessione **reale** e nessun invio a terzi.
 ///
 /// I campi testuali vengono salvati **immediatamente** al primo carattere
 /// digitato (come il CRUD inline di Clienti/Catalogo): il bottone "Salva"
@@ -21,6 +26,7 @@ import 'package:simple_order_manager/documents/brand_card_pdf.dart';
 import 'package:simple_order_manager/documents/pdf_layout.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/services/smtp_email_service.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_logo_store.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -32,6 +38,8 @@ class SettingsTab extends StatefulWidget {
     super.key,
     required this.brand,
     required this.onBrandChange,
+    this.smtpConfig = EmailSmtpConfig.empty,
+    this.onSmtpConfigChange = _noopSmtpChange,
   });
 
   /// Profilo brand corrente (logo + contatti).
@@ -41,9 +49,23 @@ class SettingsTab extends StatefulWidget {
   /// `SharedPreferences` (vedi `StorageService.saveBrand`).
   final ValueChanged<BrandProfile> onBrandChange;
 
+  /// Configurazione SMTP corrente ("Posta in uscita").
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza configurazione la sezione compare comunque, vuota.
+  final EmailSmtpConfig smtpConfig;
+
+  /// Notifica ogni modifica della posta in uscita: il dashboard la persiste
+  /// (vedi `StorageService.saveSmtpConfig`).
+  final ValueChanged<EmailSmtpConfig> onSmtpConfigChange;
+
   @override
   State<SettingsTab> createState() => _SettingsTabState();
 }
+
+/// Callback neutro: usato come default di
+/// [SettingsTab.onSmtpConfigChange] quando non è fornito.
+void _noopSmtpChange(EmailSmtpConfig config) {}
 
 class _SettingsTabState extends State<SettingsTab> {
   final _fullName = TextEditingController();
@@ -70,11 +92,43 @@ class _SettingsTabState extends State<SettingsTab> {
   /// l'anteprima; `null` significa nessun logo o nessun avviso.
   LogoAssessment? _logoQuality;
 
+  // --- Posta in uscita (SMTP) ---
+  final _smtpHost = TextEditingController();
+  final _smtpPort = TextEditingController();
+  final _smtpUsername = TextEditingController();
+  final _smtpPassword = TextEditingController();
+  final _smtpFromEmail = TextEditingController();
+  final _smtpFromName = TextEditingController();
+  final _smtpTimeout = TextEditingController();
+
+  /// Copia di lavoro della posta in uscita, stessa vita del [_draft] brand.
+  late EmailSmtpConfig _smtpDraft;
+
+  /// Campo password offuscato di default: `true` ⇒ puntini, con toggle.
+  bool _smtpObscurePassword = true;
+
+  /// `true` durante la prova di connessione: disabilita i pulsanti e mostra
+  /// l'indicatore di avanzamento (nessuna seconda chiamata concorrente).
+  bool _smtpTesting = false;
+
+  /// Sezione "Posta in uscita" aperta (default) o compressa: da compressa
+  /// resta solo il riepilogo di stato sotto il titolo.
+  bool _smtpExpanded = true;
+
   @override
   void initState() {
     super.initState();
     _draft = widget.brand;
     _syncControllers(_draft);
+    _smtpDraft = widget.smtpConfig;
+    // Prefill del campo "Da": quando la posta in uscita è vuota si propone
+    // l'email principale del brand. Il valore resta solo nella copia di
+    // lavoro finché l'utente non salva o modifica un campo (nessuna
+    // persistenza implicita di un dato che l'utente non ha digitato).
+    if (_smtpDraft.isEmpty && EmailSmtpConfig.isValidEmail(_draft.emailPrimary)) {
+      _smtpDraft = _smtpDraft.copyWith(fromEmail: _draft.emailPrimary);
+    }
+    _syncSmtpControllers(_smtpDraft);
     // L'avviso di risoluzione vale anche per immagini caricate in versioni
     // precedenti: riletto il file da disco in `initState`.
     _loadLogoQuality();
@@ -89,6 +143,14 @@ class _SettingsTabState extends State<SettingsTab> {
       _draft = widget.brand;
       _syncControllers(_draft);
     }
+    // Stessa regola per la posta in uscita (uguaglianza per valore). Una
+    // configurazione vuota dall'esterno non risincronizza: la copia locale
+    // può contenere il solo prefill "Da" dal brand, che altrimenti
+    // sparirebbe a ogni rebuild non legato alla posta in uscita.
+    if (widget.smtpConfig != _smtpDraft && widget.smtpConfig.isNotEmpty) {
+      _smtpDraft = widget.smtpConfig;
+      _syncSmtpControllers(_smtpDraft);
+    }
   }
 
   @override
@@ -100,6 +162,13 @@ class _SettingsTabState extends State<SettingsTab> {
     _website.dispose();
     _email1.dispose();
     _email2.dispose();
+    _smtpHost.dispose();
+    _smtpPort.dispose();
+    _smtpUsername.dispose();
+    _smtpPassword.dispose();
+    _smtpFromEmail.dispose();
+    _smtpFromName.dispose();
+    _smtpTimeout.dispose();
     super.dispose();
   }
 
@@ -111,6 +180,16 @@ class _SettingsTabState extends State<SettingsTab> {
     _website.text = profile.website;
     _email1.text = profile.emailPrimary;
     _email2.text = profile.emailSecondary;
+  }
+
+  void _syncSmtpControllers(EmailSmtpConfig config) {
+    _smtpHost.text = config.host;
+    _smtpPort.text = config.port.toString();
+    _smtpUsername.text = config.username;
+    _smtpPassword.text = config.password;
+    _smtpFromEmail.text = config.fromEmail;
+    _smtpFromName.text = config.fromName;
+    _smtpTimeout.text = config.timeoutSeconds.toString();
   }
 
   // ==========================================
@@ -284,6 +363,108 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   // ==========================================
+  // SMTP ACTIONS
+  // ==========================================
+
+  /// Aggiorna la copia di lavoro della posta in uscita e la persiste subito
+  /// (stesso ritmo dei campi brand: nessuna perdita all'uscita della tab).
+  void _applySmtp(EmailSmtpConfig config) {
+    setState(() => _smtpDraft = config);
+    widget.onSmtpConfigChange(config);
+  }
+
+  void _onSmtpFieldChanged(EmailSmtpConfig Function(EmailSmtpConfig) update) {
+    _applySmtp(update(_smtpDraft));
+  }
+
+  /// Salvataggio esplicito della posta in uscita: stessa semantica del
+  /// "Salva" del profilo (i campi restano già persistiti a ogni carattere,
+  /// qui serve la conferma visibile). Una configurazione incompleta viene
+  /// comunque salvata come bozza, con snackbar di avviso che spiega cosa
+  /// manca: il test e l'invio restano disabilitati finché non è valida.
+  void _saveSmtp() {
+    widget.onSmtpConfigChange(_smtpDraft);
+    final reason = SmtpEmailService.invalidReason(_smtpDraft);
+    final valid = reason == null;
+    final empty = _smtpDraft.isEmpty;
+    final detail = (reason ?? '').replaceFirst(
+      'Configurazione SMTP non valida: ',
+      '',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: Key(
+          valid || empty
+              ? 'settings-smtp-saved-snackbar'
+              : 'settings-smtp-save-invalid',
+        ),
+        backgroundColor:
+            valid || empty ? null : AppColors.tertiaryFixed,
+        content: Text(
+          valid
+              ? 'Posta in uscita salvata'
+              : empty
+                  ? 'Nessun server salvato: i documenti restano '
+                      'condivisibili con le app native del dispositivo.'
+                  : 'Salvata, ma non ancora utilizzabile: $detail',
+          style: !valid && !empty
+              ? AppTextStyles.bodySm.copyWith(
+                  color: AppColors.onTertiaryFixedVariant,
+                )
+              : null,
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Prova **reale** di connessione: apre una sessione SMTP (connessione,
+  /// EHLO, TLS/STARTTLS, autenticazione) e la richiude subito, senza inviare
+  /// alcun messaggio a nessun destinatario.
+  ///
+  /// Una configurazione non valida non tocca la rete: il risultato arriva
+  /// comunque dal servizio, con messaggio leggibile.
+  Future<void> _testSmtpConnection() async {
+    setState(() => _smtpTesting = true);
+    final result = await SmtpEmailService.instance.testConnection(_smtpDraft);
+    if (!mounted) return;
+    setState(() => _smtpTesting = false);
+    final message = result.success
+        ? 'Connessione riuscita a ${_smtpDraft.endpoint}: configurazione '
+            'funzionante.'
+        : (result.errorMessage ?? 'Connessione non riuscita.');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: Key(result.success
+            ? 'settings-smtp-test-ok'
+            : 'settings-smtp-test-error'),
+        backgroundColor: result.success ? null : AppColors.error,
+        content: Text(message),
+      ),
+    );
+  }
+
+  /// Rimuove l'intera configurazione SMTP: la tab Documenti torna a proporre
+  /// la sola condivisione nativa del PDF.
+  void _removeSmtpConfig() {
+    setState(() {
+      _smtpDraft = EmailSmtpConfig.empty;
+      _syncSmtpControllers(_smtpDraft);
+    });
+    widget.onSmtpConfigChange(EmailSmtpConfig.empty);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        key: Key('settings-smtp-removed'),
+        content: Text(
+          'Configurazione SMTP rimossa: si torna alla condivisione nativa '
+          'del PDF.',
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // ==========================================
   // BUILD
   // ==========================================
 
@@ -334,6 +515,8 @@ class _SettingsTabState extends State<SettingsTab> {
           _buildContactsCard(),
           const SizedBox(height: AppSpacing.spaceLg),
           _buildPreviewCard(),
+          const SizedBox(height: AppSpacing.spaceLg),
+          _buildSmtpCard(),
         ],
       ),
     );
@@ -605,6 +788,347 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  /// Blocco "Posta in uscita": server SMTP, credenziali, indirizzo `From`,
+  /// sicurezza, timeout, prova di connessione e rimozione.
+  ///
+  /// La sezione è collassabile (aperta di default): il riepilogo di stato
+  /// resta sempre visibile nel titolo per non perdere contesto.
+  Widget _buildSmtpCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _sectionTitle(
+                'Posta in uscita (SMTP)',
+                'Invia preventivi e ordini via email con il PDF in allegato, '
+                    'senza uscire dall\'app.',
+              ),
+            ),
+            IconButton(
+              key: const Key('settings-smtp-collapse'),
+              tooltip: _smtpExpanded ? 'Comprimi sezione' : 'Espandi sezione',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                _smtpExpanded
+                    ? Icons.expand_less
+                    : Icons.expand_more,
+                color: AppColors.onSurfaceVariant,
+              ),
+              onPressed: () => setState(() => _smtpExpanded = !_smtpExpanded),
+            ),
+          ],
+        ),
+        if (!_smtpExpanded) ...[
+          const SizedBox(height: AppSpacing.spaceXs),
+          Text(
+            key: const Key('settings-smtp-collapsed-summary'),
+            _smtpDraft.host.trim().isEmpty
+                ? 'Nessun server configurato.'
+                : 'Server ${_smtpDraft.endpoint} · '
+                    '${_smtpDraft.isValid() ? 'pronta all\'uso' : 'da completare'}',
+            style: AppTextStyles.labelSm.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (_smtpExpanded) ...[
+          const SizedBox(height: AppSpacing.spaceMd),
+          Container(
+            key: const Key('settings-smtp-card'),
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.spaceMd),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(AppRadii.xl),
+              border: Border.all(color: AppColors.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _smtpDraft.host.trim().isEmpty
+                      ? 'Nessun server configurato: i documenti restano '
+                          'condivisibili con le app native del dispositivo.'
+                      : 'Server ${_smtpDraft.endpoint} · '
+                          '${_smtpDraft.secure ? 'SSL/TLS' : 'STARTTLS'} · '
+                          '${_smtpDraft.auth ? 'con autenticazione' : 'senza autenticazione'}',
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceMd),
+                _textField(
+                  key: 'settings-smtp-host',
+                  controller: _smtpHost,
+                  label: 'Server SMTP (host)',
+                  hint: 'smtp.example.it',
+                  icon: Icons.dns_outlined,
+                  keyboardType: TextInputType.url,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                  ],
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(host: value),
+                  ),
+                ),
+                _textField(
+                  key: 'settings-smtp-port',
+                  controller: _smtpPort,
+                  label: 'Porta',
+                  hint: '587',
+                  icon: Icons.numbers_outlined,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  helperText: 'Comuni: '
+                      '${EmailSmtpConfig.commonPorts.join(' · ')} '
+                      '(587 STARTTLS, 465 SSL)',
+                  errorText: _smtpPort.text.trim().isNotEmpty &&
+                          (_smtpDraft.port < 1 || _smtpDraft.port > 65535)
+                      ? 'Porta non valida: serve un valore tra 1 e 65535.'
+                      : null,
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(
+                      port: int.tryParse(value.trim()) ?? 0,
+                    ),
+                  ),
+                ),
+                _textField(
+                  key: 'settings-smtp-username',
+                  controller: _smtpUsername,
+                  label: 'Username (spesso l\'email)',
+                  hint: 'mittente@esempio.it',
+                  icon: Icons.person_outline,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.username],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                  ],
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(username: value),
+                  ),
+                ),
+                _textField(
+                  key: 'settings-smtp-password',
+                  controller: _smtpPassword,
+                  label: 'Password SMTP / app password',
+                  hint: 'Password per app (Gmail, Outlook…)',
+                  icon: Icons.lock_outline,
+                  obscureText: _smtpObscurePassword,
+                  suffix: IconButton(
+                    key: const Key('settings-smtp-password-toggle'),
+                    tooltip: _smtpObscurePassword
+                        ? 'Mostra password'
+                        : 'Nascondi password',
+                    icon: Icon(
+                      _smtpObscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(
+                      () => _smtpObscurePassword = !_smtpObscurePassword,
+                    ),
+                  ),
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(password: value),
+                  ),
+                ),
+                  _textField(
+                    key: 'settings-smtp-fromemail',
+                    controller: _smtpFromEmail,
+                    label: 'Da (email del mittente)',
+                    hint: 'mittente@esempio.it',
+                    icon: Icons.alternate_email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                    ],
+                    errorText:
+                        _smtpFromEmail.text.trim().isNotEmpty &&
+                                !EmailSmtpConfig.isValidEmail(
+                                  _smtpDraft.fromEmail,
+                                )
+                            ? 'Indirizzo non valido: controlla email e spazi.'
+                            : null,
+                    onChanged: (value) => _onSmtpFieldChanged(
+                      (config) => config.copyWith(fromEmail: value),
+                    ),
+                  ),
+                _textField(
+                  key: 'settings-smtp-fromname',
+                  controller: _smtpFromName,
+                  label: 'Nome del mittente (opzionale)',
+                  hint: 'Andrea Morgante',
+                  icon: Icons.badge_outlined,
+                  textCapitalization: TextCapitalization.words,
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(fromName: value),
+                  ),
+                ),
+                _textField(
+                  key: 'settings-smtp-timeout',
+                  controller: _smtpTimeout,
+                  label: 'Timeout (secondi)',
+                  hint: '30',
+                  icon: Icons.timer_outlined,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(
+                      timeoutSeconds: int.tryParse(value.trim()) ?? 0,
+                    ),
+                  ),
+                ),
+                _smtpSwitch(
+                  key: 'settings-smtp-secure',
+                  label: 'Usa TLS/SSL immediato',
+                  caption: 'Attivalo per la porta 465; con la 587 resta spento '
+                      '(il client usa STARTTLS se il server lo offre).',
+                  value: _smtpDraft.secure,
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(secure: value),
+                  ),
+                ),
+                _smtpSwitch(
+                  key: 'settings-smtp-auth',
+                  label: 'Autenticazione',
+                  caption: 'Spento solo per server locali che non chiedono '
+                      'credenziali.',
+                  value: _smtpDraft.auth,
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(auth: value),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceSm),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    key: const Key('settings-smtp-save'),
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Salva'),
+                    onPressed: _smtpTesting ? null : _saveSmtp,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceSm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        key: const Key('settings-smtp-test'),
+                        icon: _smtpTesting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.network_check, size: 18),
+                        label: Text(
+                          _smtpTesting
+                              ? 'Verifica in corso…'
+                              : 'Testa connessione',
+                        ),
+                        // Configurazione incompleta: il test è disabilitato
+                        // (nessuna chiamata di rete) e il motivo compare
+                        // sotto la riga, così resta chiaro cosa manca.
+                        onPressed:
+                            (_smtpTesting || !_smtpDraft.isValid())
+                                ? null
+                                : _testSmtpConnection,
+                      ),
+                    ),
+                    if (_smtpDraft.isNotEmpty) ...[
+                      const SizedBox(width: AppSpacing.gutter),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          key: const Key('settings-smtp-remove'),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Rimuovi'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                          ),
+                          onPressed: _smtpTesting ? null : _removeSmtpConfig,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_smtpDraft.host.trim().isNotEmpty &&
+                    !_smtpDraft.isValid()) ...[
+                  const SizedBox(height: AppSpacing.spaceSm),
+                  Text(
+                    key: const Key('settings-smtp-invalid-reason'),
+                    SmtpEmailService.invalidReason(_smtpDraft) ??
+                        'Configurazione non valida.',
+                    style: AppTextStyles.bodySm.copyWith(
+                      color: AppColors.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.spaceMd),
+                Text(
+                  'La password resta solo su questo dispositivo (storage '
+                  'locale dell\'app) e non compare mai nei messaggi di errore: '
+                  'Gmail e Outlook richiedono una "password per app". Il test '
+                  'apre e chiude una sessione senza inviare email.',
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Etichetta + interruttore (TLS immediato, autenticazione) con didascalia.
+  Widget _smtpSwitch({
+    required String key,
+    required String label,
+    required String caption,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.spaceSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AppTextStyles.bodyMd.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceXs),
+                Text(
+                  caption,
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            key: Key(key),
+            value: value,
+            onChanged: _smtpTesting ? null : onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Anteprima live: identico header stampato nel PDF.
   Widget _buildPreviewCard() {
     return Container(
@@ -686,6 +1210,10 @@ class _SettingsTabState extends State<SettingsTab> {
     List<String>? autofillHints,
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.sentences,
+    bool obscureText = false,
+    String? helperText,
+    String? errorText,
+    Widget? suffix,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.gutter),
@@ -697,11 +1225,15 @@ class _SettingsTabState extends State<SettingsTab> {
         textCapitalization: textCapitalization,
         autofillHints: autofillHints,
         inputFormatters: inputFormatters,
+        obscureText: obscureText,
         style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
+          helperText: helperText,
+          errorText: errorText,
           prefixIcon: Icon(icon, size: 20),
+          suffixIcon: suffix,
           filled: true,
           fillColor: AppColors.surfaceContainerLowest,
           contentPadding: const EdgeInsets.symmetric(
