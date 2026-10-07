@@ -1,6 +1,6 @@
 # Simple Order Manager 📱
 
-**Versione corrente: `1.5.0` (build `6`)** — in-app: icona `ⓘ` ("Info & Versione") nelle quattro tab.
+**Versione corrente: `1.5.1` (build `7`)** — in-app: icona `ⓘ` ("Info & Versione") nelle quattro tab.
 
 Applicazione Flutter completa per la gestione offline di preventivi, schede lavoro, anagrafica clienti e catalogo prodotti/servizi (ispirata a *Invoice Simple*, senza emissione di fatture fiscali).
 
