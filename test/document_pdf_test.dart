@@ -397,14 +397,14 @@ void main() {
       expect(content, contains('/Subtype/Image'));
     });
 
-    test('il logo è stampato alto 72 pt con le proporzioni native', () async {
+    test('il logo è stampato alto 90 pt con le proporzioni native', () async {
       final store = BrandLogoStore(directoryResolver: () async => directory);
       final brand = await brandWithLogoOnDisk(store);
 
       expect(
         DocumentPdfService.logoHeight,
-        72,
-        reason: 'logo +50%: 48 pt → 72 pt (circa 25,4 mm)',
+        90,
+        reason: 'logo +25%: 72 pt → 90 pt (circa 31,7 mm)',
       );
 
       final bytes = await DocumentPdfService.instance.buildBytes(
@@ -418,18 +418,23 @@ void main() {
       // mai imposte indipendentemente, quindi il logo non viene distorto.
       expect(
         content,
-        contains('q 144 0 0 72 0 0 cm'),
-        reason: 'marchio 2:1 disegnato 144×72 pt, allineato a sinistra',
+        contains('q 180 0 0 90 0 0 cm'),
+        reason: 'marchio 2:1 disegnato 180×90 pt, allineato a sinistra',
+      );
+      expect(
+        content,
+        isNot(contains('q 144 0 0 72 0 0 cm')),
+        reason: 'le dimensioni precedenti (72 pt) non devono più comparire',
       );
       expect(
         content,
         isNot(contains('q 96 0 0 48')),
-        reason: 'le dimensioni precedenti (48 pt) non devono più comparire',
+        reason: 'le dimensioni originarie (48 pt) non devono mai comparire',
       );
 
       // Nessun ricampionamento: l'XObject conserva i pixel del file
       // normalizzato su disco (stessa risoluzione, nessuno sgranamento a
-      // 84 px logici su dpr 3).
+      // 90 px logici su dpr 3).
       final onDisk = img.decodeImage((await store.read(brand.logoPath))!);
       expect(onDisk, isNotNull);
       expect(onDisk!.width, 24);
@@ -454,9 +459,13 @@ void main() {
       );
 
       // `BoxFit.contain` su un'immagine 1:1: l'altezza vale logoHeight e la
-      // larghezza la segue (72×72), senza stiramento alla colonna (~257 pt).
-      expect(content, contains('q 72 0 0 72 0 0 cm'));
-      expect(content, isNot(contains('144 0 0 72')), reason: 'logo 1:1');
+      // larghezza la segue (90×90), senza stiramento alla colonna (~257 pt).
+      expect(content, contains('q 90 0 0 90 0 0 cm'));
+      expect(
+        content,
+        isNot(contains('q 180 0 0 90 0 0 cm')),
+        reason: 'logo 1:1',
+      );
       expect(content, contains('/Subtype/Image/Width 30/Height 30'));
     });
 

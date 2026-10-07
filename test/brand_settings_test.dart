@@ -321,34 +321,34 @@ void main() {
       return tester.getSize(logo);
     }
 
-    testWidgets('area 2:1: 168x84 completa, 132x66 dense (era 112x56 / 88x44)',
+    testWidgets('area 2:1: 240x120 completa, 180x90 dense (era 168x84 / 132x66)',
         (
       WidgetTester tester,
     ) async {
       // Logo 2:1 (480×240): riempie esattamente l'area riservata, quindi ne
-      // misura larghezza e altezza. +50% rispetto alle dimensioni precedenti.
+      // misura larghezza e altezza. Area incrementata al nuovo dimensionamento.
       expect(
         await renderedLogoSize(tester, 480, 240, dense: false),
-        const Size(168, 84),
+        const Size(240, 120),
       );
       expect(
         await renderedLogoSize(tester, 480, 240, dense: true),
-        const Size(132, 66),
+        const Size(180, 90),
       );
     });
 
-    testWidgets('logo quadrato: contenuto in 84x84 / 66x66, mai stirato', (
+    testWidgets('logo quadrato: contenuto in 120x120 / 90x90, mai stirato', (
       WidgetTester tester,
     ) async {
       // Logo 1:1: `BoxFit.contain` lo limita all'altezza dell'area, quindi
       // resta quadrato anche se l'area è 2:1.
       expect(
         await renderedLogoSize(tester, 240, 240, dense: false),
-        const Size(84, 84),
+        const Size(120, 120),
       );
       expect(
         await renderedLogoSize(tester, 240, 240, dense: true),
-        const Size(66, 66),
+        const Size(90, 90),
       );
     });
 
@@ -357,8 +357,8 @@ void main() {
     ) async {
       expect(
         await renderedLogoSize(tester, 400, 100, dense: true),
-        const Size(132, 33),
-        reason: '4:1 in 132×66 ⇒ altezza 33, larghezza 132: nessuno stiramento',
+        const Size(180, 45),
+        reason: '4:1 in 180×90 ⇒ altezza 45, larghezza 180: nessuno stiramento',
       );
     });
 
@@ -400,10 +400,10 @@ void main() {
       );
       await _settleLogoIo(tester);
 
-      expect(tester.takeException(), isNull, reason: 'logo 132×66 in 280 px');
+      expect(tester.takeException(), isNull, reason: 'logo 180×90 in 280 px');
       final logos = find.byKey(const Key('brand-header-logo'));
       expect(logos, findsOneWidget);
-      expect(tester.getSize(logos), const Size(132, 66));
+      expect(tester.getSize(logos), const Size(180, 90));
       // I contatti lunghi si comprimono (ellipsis) invece di sbordare.
       final contacts = find.byKey(const Key('brand-header-contacts'));
       expect(contacts, findsNWidgets(2));
@@ -438,8 +438,8 @@ void main() {
       expect(calls.single.method, 'pickImage');
       final args = calls.single.arguments as Map<Object?, Object?>;
       expect(args['source'], ImageSource.gallery.index);
-      expect(args['maxWidth'], 1600);
-      expect(args['maxHeight'], 1600);
+      expect(args['maxWidth'], 2048);
+      expect(args['maxHeight'], 2048);
       expect(args['imageQuality'], 92);
 
       // Il file del logo esiste e il profilo ne memorizza il solo path.
@@ -533,8 +533,7 @@ void main() {
       expect(find.byKey(const Key('settings-brand-logo-remove')), findsNothing);
     });
 
-    testWidgets('il logo dell\'anteprima è 66 px (dense +50%) e non è stirato',
-        (
+    testWidgets('il logo dell\'anteprima è 90 px (dense) e non è stirato', (
       WidgetTester tester,
     ) async {
       final temp = Directory.systemTemp.createTempSync('simple_order_gallery_');
@@ -542,8 +541,7 @@ void main() {
         if (temp.existsSync()) temp.deleteSync(recursive: true);
       });
       // Logo quadrato più grande dell'area riservata (che è 2:1): deve essere
-      // contenuto in 66×66, non allargato a 132×66 né ridotto a 44 come
-      // prima della modifica.
+      // contenuto in 90×90, non allargato a 180×90 né ridimensionato a mano.
       final picked = _writePng(temp, 240, 240);
       _mockImagePicker(tester, () async => picked);
 
@@ -560,8 +558,8 @@ void main() {
       expect(logo, findsOneWidget, reason: 'anteprima con immagine, non testo');
       expect(
         tester.getSize(logo),
-        const Size(66, 66),
-        reason: 'logo dense +50%: contenuto in 66×66 (era 44×44)',
+        const Size(90, 90),
+        reason: 'logo dense: contenuto in 90×90 (area 180×90)',
       );
 
       // `BoxFit.contain` + allineamento a sinistra: nessuna distorsione.
@@ -569,10 +567,10 @@ void main() {
       expect(image.fit, BoxFit.contain);
       expect(image.alignment, Alignment.centerLeft);
       expect(
-        applyBoxFit(BoxFit.contain, const Size(240, 240), const Size(132, 66))
+        applyBoxFit(BoxFit.contain, const Size(240, 240), const Size(180, 90))
             .destination,
-        const Size(66, 66),
-        reason: 'un quadrato nell\'area 132×66 è contenuto, non stirato',
+        const Size(90, 90),
+        reason: 'un quadrato nell\'area 180×90 è contenuto, non stirato',
       );
       expect(tester.takeException(), isNull);
     });

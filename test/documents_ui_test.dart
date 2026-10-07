@@ -961,7 +961,7 @@ void main() {
     });
 
     testWidgets(
-        'header con logo reale nel dettaglio a 360x640: 132x66 e '
+        'header con logo reale nel dettaglio a 360x640: 180x90 e '
         'contatti senza sovrapposizioni', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1.0;
@@ -975,8 +975,8 @@ void main() {
       addTearDown(() {
         if (temp.existsSync()) temp.deleteSync(recursive: true);
       });
-      // Logo 2:1 reale: nell'area dense 132×66 riempie l'intera area, quindi
-      // ne misura le dimensioni effettive (prima del +50% erano 88×44).
+      // Logo 2:1 reale: nell'area dense 180×90 riempie l'intera area, quindi
+      // ne misura le dimensioni effettive (prima erano 132×66).
       final logo = File(
         '${temp.path}${Platform.pathSeparator}logo-2x1.png',
       )..writeAsBytesSync(
@@ -1008,8 +1008,8 @@ void main() {
       );
       expect(
         tester.getSize(headerLogo),
-        const Size(132, 66),
-        reason: 'area riservata al logo dense: 132×66 (era 88×44)',
+        const Size(180, 90),
+        reason: 'area riservata al logo dense: 180×90 (era 132×66)',
       );
 
       // I contatti lunghi restano a destra del logo, senza sovrapporlo e
@@ -1100,7 +1100,7 @@ void main() {
       expect(headerLogo, findsOneWidget, reason: 'logo reale nel foglio');
       expect(
         tester.getSize(headerLogo),
-        const Size(132, 66),
+        const Size(180, 90),
         reason: 'area riservata dense invariata anche a 320 px',
       );
       expect(

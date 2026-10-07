@@ -117,8 +117,8 @@ class _SettingsTabState extends State<SettingsTab> {
     try {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1600,
-        maxHeight: 1600,
+        maxWidth: 2048,
+        maxHeight: 2048,
         imageQuality: 92,
       );
       if (picked == null) return; // utente ha annullato: nessun messaggio
@@ -278,7 +278,7 @@ class _SettingsTabState extends State<SettingsTab> {
               Container(
                 key: const Key('settings-brand-logo-preview'),
                 width: double.infinity,
-                height: 96,
+                height: 120,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: AppColors.surfaceContainerLow,
