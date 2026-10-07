@@ -35,7 +35,7 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
     con l'intestazione brand in cima (logo + nome e contatti del mittente).
 - **Tab "Impostazioni" → Profilo / Brand**:
   - Logo del mittente caricato dalla galleria: l'immagine viene normalizzata (PNG, lato massimo
-    1024 px) e salvata in `<appDocuments>/brand/logo.png`; nelle preferenze viene salvato solo il
+    2048 px) e salvata in `<appDocuments>/brand/logo.png`; nelle preferenze viene salvato solo il
     percorso, mai i byte.
   - Dati del mittente: Nome e cognome, Ruolo/Qualifica, Telefono 1, Telefono 2, Sito web, Email
     principale, Email secondaria.

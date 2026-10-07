@@ -10,7 +10,45 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ## [Unreleased]
 
-Nessuna modifica in corso.
+### Changed
+
+- **Area del logo in intestazione ingrandita** (da 168×84 / 132×66 a 240×120 / 180×90), con
+  sorgente conservata a risoluzione sufficiente per restare nitida ("non sgranare") e senza
+  alcuna distorsione:
+  - `lib/settings/brand_header.dart`: l'area riservata al logo passa da `168×84` a **`240×120`**
+    (anteprima live in Impostazioni, non `dense`) e da `132×66` a **`180×90`** (variante `dense`,
+    usata dal bottom sheet di dettaglio). Rapporto 2:1 invariato e resa sempre contenente
+    (`BoxFit.contain` + `Alignment.centerLeft`): un logo quadrato occupa 120×120 / 90×90, un logo
+    4:1 occupa 180×45 nella variante `dense`. Il blocco con logo non è più un figlio `Flexible`
+    della `Row`: con lo spazio stretto (280 px utili a 320 px di schermo) l'area resta 180×90 e a
+    comprimersi con ellipsis sono i contatti, senza overflow né sovrapposizioni. Il testo di
+    fallback (nessun logo) resta `Flexible` come prima.
+  - `lib/documents/document_pdf.dart`: `DocumentPdfService.logoHeight` passa da **72 a 90 pt**
+    (circa 25,4 → 31,7 mm). La proporzione nativa resta garantita da `pw.BoxFit.contain` +
+    `pw.Alignment.centerLeft` nel `pw.Expanded` di metà colonna (~257 pt su A4 con margini di
+    36 pt): un logo con rapporto oltre ~2,85:1 viene ridotto per contenimento e reso leggermente
+    più basso, mai distorto.
+  - `lib/settings/brand_logo_store.dart`: `BrandLogoStore.maxLogoSide` passa da **1024 a 2048 px**,
+    sufficiente per dpr 3 sulle aree maggiorate e per la stampa A4 a 90 pt. `normalize()` resta
+    senza upscaling: ridimensiona solo le immagini più grandi del lato massimo.
+  - `lib/settings/brand_settings_screen.dart`: `image_picker` viene invocato con `maxWidth`/
+    `maxHeight` **2048** (era 1600, `imageQuality` 92 invariato) e il box di anteprima logo in
+    Impostazioni cresce da 96 a **120** px di altezza (`BoxFit.contain` invariato).
+  - Il fallback testuale resta invariato: marchio `Simple Order Manager` a 18 pt nel PDF e
+    `AppTextStyles.headlineSm` a schermo.
+- Test:
+  - `test/document_pdf_test.dart`: `logoHeight == 90`, matrice di placement `q 180 0 0 90` per un
+    logo 2:1 e `q 90 0 0 90` per un logo 1:1, assenza dei vecchi valori (`q 144 0 0 72` e
+    `q 96 0 0 48`) e assenza di ricampionamento (l'XObject immagine conserva i pixel del file su
+    disco).
+  - `test/brand_settings_test.dart`: aree attese `240×120` / `180×90`, quadrato contenuto in
+    `120×120` / `90×90`, panoramico 4:1 in `180×45`, nessun overflow a 320 px (280 px utili) con
+    logo `180×90`, picker a `maxWidth`/`maxHeight` 2048.
+  - `test/documents_ui_test.dart`: bottom sheet di dettaglio a 360×640 e 320×640 con logo reale
+    verifica l'area `180×90`, l'assenza di sovrapposizione fra logo e contatti e l'assenza di
+    overflow.
+  - `test/brand_test.dart`: normalizzazione con ingresso 4096 px ridotto a 2048 px, immagini di
+    2048 px o più piccole lasciate inalterate, byte non-immagine restituiti invariati.
 
 ## [1.5.1] - 2026-10-06
 

@@ -46,7 +46,7 @@ class BrandHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Flexible(child: _buildIdentity()),
+          _buildIdentity(),
           if (brand.pdfHeaderLines.isNotEmpty) ...[
             const SizedBox(width: AppSpacing.gutter),
             Flexible(
@@ -68,12 +68,19 @@ class BrandHeader extends StatelessWidget {
   ///
   /// L'area riservata mantiene il rapporto 2:1 del PDF (larghezza = 2 ×
   /// altezza) e il logo vi è disegnato con `BoxFit.contain`: l'altezza vale
-  /// 84 px nella versione completa, 66 px in quella `dense` (+50% rispetto
-  /// alle dimensioni precedenti, coerente con `DocumentPdfService.logoHeight`).
+  /// 120 px nella versione completa (area 240×120), 90 px in quella `dense`
+  /// (area 180×90), coerente con `DocumentPdfService.logoHeight` e con il
+  /// lato massimo 2048 px di `BrandLogoStore.maxLogoSide`.
   /// Un file non quadrato riempie comunque tutta l'altezza disponibile senza
   /// deformarsi.
+  ///
+  /// Il blocco con logo è un figlio **non flessibile** della `Row`: così
+  /// l'area non si comprime quando lo spazio è stretto (a 320 px restano
+  /// 280 px utili) e a ridursi sono i contatti, che si troncano con ellipsis.
+  /// Il testo di fallback resta invece `Flexible`, perché senza logo occupa
+  /// lo spazio disponibile come prima.
   Widget _buildIdentity() {
-    final size = dense ? 66.0 : 84.0;
+    final size = dense ? 90.0 : 120.0;
     final fallback = Text(
       BrandProfile.documentHeaderFallback,
       maxLines: 2,
@@ -82,7 +89,7 @@ class BrandHeader extends StatelessWidget {
       style: AppTextStyles.headlineSm.copyWith(color: AppColors.primary),
     );
 
-    if (!brand.hasLogo) return fallback;
+    if (!brand.hasLogo) return Flexible(child: fallback);
 
     return Container(
       width: size * 2,

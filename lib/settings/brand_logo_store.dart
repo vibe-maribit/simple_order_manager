@@ -1,7 +1,7 @@
 /// Persistenza del logo del brand su disco.
 ///
 /// Il logo non finisce mai in `SharedPreferences`: viene normalizzato (PNG,
-/// lato max 1024 px) e scritto in `<appDocuments>/brand/logo.png`, mentre nelle
+/// lato max 2048 px) e scritto in `<appDocuments>/brand/logo.png`, mentre nelle
 /// preferenze si salva **solo il path**. Così le preferenze restano leggere e
 /// il file può essere rigenerato senza perdere i dati del profilo.
 library;
@@ -28,9 +28,10 @@ class BrandLogoStore {
   /// Percorso relativo del logo dentro la cartella dell'app.
   static const String logoFileName = 'brand/logo.png';
 
-  /// Lato massimo (px) del logo salvato: abbastanza nitido per la stampa
-  /// A4, abbastanza piccolo da non occupare spazio inutile.
-  static const int maxLogoSide = 1024;
+  /// Lato massimo (px) del logo salvato: 2048 px coprono dpr 3 sulle aree
+  /// maggiorate dello header (180×90 / 240×120) e la stampa A4 con
+  /// `logoHeight` a 90 pt, restando comunque contenuti su disco.
+  static const int maxLogoSide = 2048;
 
   /// Soglia oltre la quale [normalize] preferisce il JPEG al PNG.
   static const int maxPngBytes = 2 * 1024 * 1024;
@@ -54,6 +55,7 @@ class BrandLogoStore {
   }
 
   /// Normalizza i byte di un'immagine: PNG con lato massimo [maxLogoSide].
+  /// L'immagine viene ridimensionata solo se più grande: nessun upscaling.
   ///
   /// È statica e pura (nessun plugin, nessun I/O) così può essere verificata
   /// nei test senza piattaforma. I byte non immagine o il fallimento della

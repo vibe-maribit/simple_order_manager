@@ -213,12 +213,21 @@ void main() {
       expect(img.decodePng(normalized), isNotNull);
     });
 
-    test('le immagini più larghe di 1024 px vengono ridimensionate', () async {
-      final normalized = await BrandLogoStore.normalize(_png(2048, 512));
+    test('le immagini più larghe di 2048 px vengono ridimensionate', () async {
+      final normalized = await BrandLogoStore.normalize(_png(4096, 1024));
       final decoded = img.decodePng(normalized)!;
 
       expect(decoded.width, BrandLogoStore.maxLogoSide);
       expect(decoded.height, BrandLogoStore.maxLogoSide ~/ 4);
+    });
+
+    test('un\'immagine esattamente al lato massimo resta invariata', () async {
+      final normalized =
+          await BrandLogoStore.normalize(_png(2048, 512));
+      final decoded = img.decodePng(normalized)!;
+
+      expect(decoded.width, 2048);
+      expect(decoded.height, 512);
     });
 
     test('le immagini già piccole mantengono le dimensioni', () async {
