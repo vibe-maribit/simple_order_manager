@@ -1976,11 +1976,17 @@ class _OrdersTabState extends State<OrdersTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      order.orderNumber,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                    // Numero ordine: si rimpicciolisce con ellipsis invece di
+                    // far sbordare la riga su schermi stretti (≤360 px).
+                    Flexible(
+                      child: Text(
+                        order.orderNumber,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     DropdownButton<OrderStatus>(
@@ -2072,7 +2078,13 @@ class _OrdersTabState extends State<OrdersTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Subtotale Imponibile:'),
+                    const Flexible(
+                      child: Text(
+                        'Subtotale Imponibile:',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     Text(
                       '€ ${order.subtotal.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 16),
@@ -2083,7 +2095,13 @@ class _OrdersTabState extends State<OrdersTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Totale Imposte/IVA:'),
+                    const Flexible(
+                      child: Text(
+                        'Totale Imposte/IVA:',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     Text(
                       '€ ${order.taxTotal.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 16),
@@ -2094,11 +2112,15 @@ class _OrdersTabState extends State<OrdersTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'TOTALE PREVENTIVO:',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    const Flexible(
+                      child: Text(
+                        'TOTALE PREVENTIVO:',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     Text(

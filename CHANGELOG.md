@@ -47,10 +47,19 @@ Nessuna modifica in corso.
     del solo testo di fallback. La cache globale di `PaintingBinding` viene azzerata tra i
     test, perché i loghi condividono lo stesso path su disco.
   - `test/documents_ui_test.dart`: il bottom sheet di dettaglio a 360×640 con logo reale
-    verifica l'area `132×66` e che logo e blocco contatti non si sovrappongano.
+    verifica l'area `132×66`, che logo e blocco contatti non si sovrappongano e che
+    `tester.takeException()` resti `null`, cioè che **nessun elemento del foglio sbordi**
+    (numero ordine, righe dei totali, pulsanti). Nuovo caso equivalente a **320×640** con
+    numero ordine, cliente, voce di catalogo e dati mittente lunghi.
 
 ### Fixed
 
+- Bottom sheet di dettaglio a schermi stretti (≤360 px): le righe **numero ordine + menu stato**,
+  **Subtotale Imponibile**, **Totale Imposte/IVA** e **TOTALE PREVENTIVO** potevano sbordare verso
+  destra (`RenderFlex overflowed`, amplificato dai fonti dei widget test). I testi di etichetta e
+  numero sono ora contenuti in `Flexible` con `maxLines: 1` + `TextOverflow.ellipsis`: si
+  rimpiccioliscono solo quando non entrano, mentre i valori numerici restano invariati a destra e
+  su schermi ampi il rendering è identico al precedente.
 - Riparato il codice corrotto da un merge automatico precedente, che rendeva il progetto non
   compilabile e di fatto impediva l'esecuzione di **tutta** la suite di test:
   - `lib/main.dart`: rimossa una `),` duplicata nel bottom sheet di `_shareOrder` e un frammento

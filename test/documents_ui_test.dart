@@ -1013,9 +1013,7 @@ void main() {
       );
 
       // I contatti lunghi restano a destra del logo, senza sovrapporlo e
-      // senza uscire dall'header. (Il foglio, a ≤480 px, ha già sbordamenti
-      // preesistenti su righe non brand — numero ordine e totali — nei font di
-      // test: qui si verifica solo l'header, che è il blocco modificato.)
+      // senza uscire dall'header.
       final contacts = find.byKey(const Key('brand-header-contacts'));
       expect(contacts, findsOneWidget);
       expect(
@@ -1026,13 +1024,91 @@ void main() {
       expect(tester.getRect(contacts).right,
           lessThanOrEqualTo(tester.getRect(header).right));
 
-      // Le righe non brand del foglio (numero ordine + menu stato, totali)
-      // sbordano già sotto i ~600 px con i font di test: sono overflow
-      // preesistenti, estranei all'header verificato sopra. Si svuotano qui
-      // perché il framework fallisce il test su eccezioni non consumate.
-      while (tester.takeException() != null) {
-        // drain
-      }
+      // Nessun overflow nel foglio a 360x640 con logo reale e testi lunghi:
+      // header compreso, numero ordine, righe dei totali e pulsanti.
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'nessun overflow nel bottom sheet a 360x640 con logo',
+      );
+    });
+
+    testWidgets(
+        'foglio dettaglio a 320x640 con logo reale e testi lunghi: '
+        'nessun overflow', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      PaintingBinding.instance.imageCache.clear();
+      addTearDown(PaintingBinding.instance.imageCache.clear);
+
+      final temp =
+          Directory.systemTemp.createTempSync('simple_order_sheet_320_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      final logo = File(
+        '${temp.path}${Platform.pathSeparator}logo-2x1.png',
+      )..writeAsBytesSync(
+          img.encodePng(img.Image(width: 480, height: 240)),
+        );
+
+      // Stesso ordine "molto lungo" del caso 320x640 della lista, così il
+      // foglio deve reggere numero ordine, cliente, voce e totali lunghi.
+      final orders = <WorkOrder>[
+        WorkOrder(
+          id: 'long-1',
+          orderNumber: 'ORD-2026-000000000042-EXTRA-LONG-SUFFIX',
+          clientId: 'c1',
+          clientName:
+              'Studio Tecnico Bianchi Associati Sperimentale Di Milano Nord',
+          items: <OrderItem>[
+            OrderItem(
+              id: 'li1',
+              catalogItemId: 'p1',
+              name: 'Sostituzione Scheda di Controllo Industriale Con Vasca',
+              unitPrice: 12345.67,
+              taxRate: 22.0,
+              quantity: 12.0,
+            ),
+          ],
+          status: OrderStatus.inAttesa,
+          date: DateTime(2026, 10, 6),
+        ),
+      ];
+      final brand = _brandProfile.copyWith(
+        logoPath: logo.path,
+        fullName: 'Andrea Morgante Colormeter Amministrazione Srl',
+        emailPrimary: 'amministrazione.vendite@colormeter.it',
+      );
+
+      await _pumpDocumentsTab(tester, orders, brand: brand);
+      expect(tester.takeException(), isNull);
+
+      await _openCard(tester, 'long-1');
+      await tester.tap(
+        find.byKey(const Key('documents-primary-action-long-1')),
+      );
+      await _settleImageIo(tester);
+
+      final header = find.byKey(const Key('documents-detail-brand-header'));
+      expect(header, findsOneWidget);
+      final headerLogo = find.descendant(
+        of: header,
+        matching: find.byKey(const Key('brand-header-logo')),
+      );
+      expect(headerLogo, findsOneWidget, reason: 'logo reale nel foglio');
+      expect(
+        tester.getSize(headerLogo),
+        const Size(132, 66),
+        reason: 'area riservata dense invariata anche a 320 px',
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'nessun overflow nel bottom sheet a 320x640 con logo reale '
+            'e testi lunghi',
+      );
     });
   });
 }
