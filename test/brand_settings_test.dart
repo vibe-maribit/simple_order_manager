@@ -700,13 +700,21 @@ void main() {
       }
       expect(tester.takeException(), isNull);
 
-      // Scorre tutto il pannello: nessun overflow e anteprima raggiungibile.
-      for (var i = 0; i < 8; i++) {
+      // Scorre tutto il pannello: nessun overflow. Il pannello è più lungo
+      // perché in coda c'è la sezione "Posta in uscita (SMTP)", quindi si
+      // scende fino in fondo e poi si risale fino all'anteprima (che deve
+      // restare costruibile anche oltre la sezione nuova).
+      for (var i = 0; i < 20; i++) {
         await tester.drag(find.byType(ListView), const Offset(0, -200));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       }
-      expect(find.byKey(const Key('settings-brand-preview')), findsOneWidget);
+      for (var i = 0; i < 20 && preview.evaluate().isEmpty; i++) {
+        await tester.drag(find.byType(ListView), const Offset(0, 200));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      expect(preview, findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
