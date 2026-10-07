@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -105,6 +106,76 @@ Future<void> _scrollUntilVisible(
     await tester.drag(find.byType(ListView), const Offset(0, -200));
     await tester.pumpAndSettle();
   }
+}
+
+/// SVG valido (il sniffing di [BrandLogoStore.isSvg] accetta un `<svg` in
+/// testa): scritto così com'è su disco, senza normalizzazione raster.
+const String _svgLogo =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+    '<rect width="10" height="10" fill="#2888EE"/></svg>';
+
+/// Selettore file deterministico: registra gli argomenti della chiamata e
+/// restituisce [result] (`null` = annullamento).
+///
+/// Sostituisce `FilePicker.platform` (mai inizializzato in `flutter test`,
+/// perché il registrant dei plugin dart non gira) così si può verificare che
+/// "Carica logo SVG" chieda davvero il tipo `custom` con l'estensione `svg`
+/// e i byte in memoria, senza canali nativi.
+class _RecordingFilePicker extends FilePicker {
+  FileType? type;
+  List<String>? allowedExtensions;
+  bool? withData;
+  FilePickerResult? result;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = true,
+    int compressionQuality = 30,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async {
+    this.type = type;
+    this.allowedExtensions = allowedExtensions;
+    this.withData = withData;
+    return result;
+  }
+}
+
+/// Installa un selettore file fittizio per la durata del test e lo restituisce.
+_RecordingFilePicker _installFilePicker() {
+  final picker = _RecordingFilePicker();
+  FilePicker.platform = picker;
+  addTearDown(() => FilePicker.platform = _RecordingFilePicker());
+  return picker;
+}
+
+/// Mock del canale `net.nfet.printing`: senza rasterizzazione l'anteprima PDF
+/// costruisce lo stato di fallback invece di restare in caricamento infinito.
+void _mockPrintingChannel(WidgetTester tester) {
+  const channel = MethodChannel('net.nfet.printing');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (call) async {
+      if (call.method == 'printingInfo') {
+        return <String, dynamic>{'canRaster': false};
+      }
+      return null;
+    },
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
 }
 
 void main() {
@@ -660,6 +731,199 @@ void main() {
       expect(saved.hasLogo, isTrue);
       expect(File(saved.logoPath!).existsSync(), isTrue);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Impostazioni → logo SVG', () {
+    testWidgets('l\'upload SVG salva il file grezzo e mostra il badge', (
+      WidgetTester tester,
+    ) async {
+      final picker = _installFilePicker();
+      final raw = Uint8List.fromList(_svgLogo.codeUnits);
+      picker.result = FilePickerResult(<PlatformFile>[
+        PlatformFile(name: 'logo.svg', size: raw.length, bytes: raw),
+      ]);
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo-svg')));
+      await _settleLogoIo(tester);
+
+      // Il selettore è un file custom con estensione `svg` e byte in memoria.
+      expect(picker.type, FileType.custom);
+      expect(picker.allowedExtensions, <String>['svg']);
+      expect(picker.withData, isTrue);
+
+      final saved = await StorageService.loadBrand();
+      expect(saved.hasLogo, isTrue);
+      expect(saved.logoPath, endsWith(BrandLogoStore.logoSvgFileName));
+      final onDisk = await _realIo(
+        tester,
+        () => BrandLogoStore.instance.read(saved.logoPath),
+      );
+      expect(onDisk, isNotNull);
+      expect(String.fromCharCodes(onDisk!), startsWith('<svg'));
+
+      // Il badge "SVG" prende il posto di `Image.file` (che non sa leggere gli
+      // SVG): nessun `Image` costruito nel riquadro di anteprima.
+      final preview = find.byKey(const Key('settings-brand-logo-preview'));
+      expect(preview, findsOneWidget);
+      expect(
+        find.descendant(of: preview, matching: find.text('SVG')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: preview, matching: find.byIcon(Icons.polyline)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: preview, matching: find.byType(Image)),
+        findsNothing,
+      );
+
+      // Nessun avviso di risoluzione: un vettoriale è nitido a qualunque scala.
+      expect(find.byKey(const Key('settings-brand-logo-lowres')), findsNothing);
+      expect(
+        find.byKey(const Key('settings-brand-logo-quality')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('l\'annullamento della selezione non mostra messaggi', (
+      WidgetTester tester,
+    ) async {
+      final picker = _installFilePicker()..result = null;
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo-svg')));
+      await _settleLogoIo(tester);
+
+      expect(picker.type, FileType.custom);
+      expect(picker.allowedExtensions, <String>['svg']);
+      expect(
+        find.byKey(const Key('settings-brand-logo-svg-error')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('settings-brand-logo-lowres')), findsNothing);
+      expect((await StorageService.loadBrand()).hasLogo, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('un file SVG illeggibile usa lo snackbar dedicato', (
+      WidgetTester tester,
+    ) async {
+      final picker = _installFilePicker()
+        ..result = FilePickerResult(<PlatformFile>[
+          PlatformFile(name: 'logo.svg', size: 0),
+        ]);
+      expect(picker.result, isNotNull);
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo-svg')));
+      await _settleLogoIo(tester);
+
+      expect(
+        find.byKey(const Key('settings-brand-logo-svg-error')),
+        findsOneWidget,
+      );
+      expect((await StorageService.loadBrand()).hasLogo, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Impostazioni → qualità del logo', () {
+    testWidgets('un logo sotto soglia mostra snackbar e didascalia', (
+      WidgetTester tester,
+    ) async {
+      final temp = Directory.systemTemp.createTempSync('simple_order_gallery_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      _mockImagePicker(tester, () async => _writePng(temp, 40, 40));
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo')));
+      await _settleLogoIo(tester);
+
+      // Snackbar: dimensione reale, soglia del box 25×15 mm e promessa di
+      // nessun upscaling.
+      final snackbar = find.byKey(const Key('settings-brand-logo-lowres'));
+      expect(snackbar, findsOneWidget);
+      expect(
+        find.descendant(of: snackbar, matching: find.textContaining('40×40 px')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: snackbar,
+          matching: find.textContaining('295×177 px a 300 DPI'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: snackbar, matching: find.textContaining('25×15 mm')),
+        findsOneWidget,
+      );
+
+      // Didascalia persistente sotto l'anteprima, stesso messaggio.
+      final caption = find.byKey(const Key('settings-brand-logo-quality'));
+      expect(caption, findsOneWidget);
+      expect(tester.widget<Text>(caption).data, contains('40×40 px'));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('un logo sopra soglia non mostra alcun avviso', (
+      WidgetTester tester,
+    ) async {
+      final temp = Directory.systemTemp.createTempSync('simple_order_gallery_');
+      addTearDown(() {
+        if (temp.existsSync()) temp.deleteSync(recursive: true);
+      });
+      _mockImagePicker(tester, () async => _writePng(temp, 400, 400));
+
+      await _openSettingsTab(tester);
+      await tester.tap(find.byKey(const Key('settings-brand-logo')));
+      await _settleLogoIo(tester);
+
+      expect(find.byKey(const Key('settings-brand-logo-lowres')), findsNothing);
+      expect(
+        find.byKey(const Key('settings-brand-logo-quality')),
+        findsNothing,
+      );
+      expect((await StorageService.loadBrand()).hasLogo, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Impostazioni → anteprima biglietto da visita', () {
+    testWidgets('genera il PDF e apre la schermata condivisa', (
+      WidgetTester tester,
+    ) async {
+      _mockPrintingChannel(tester);
+
+      await _openSettingsTab(tester);
+      final button = find.byKey(const Key('settings-brand-card-preview'));
+      await _scrollUntilVisible(tester, button);
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      expect(button, findsOneWidget);
+
+      await tester.tap(button);
+      // L'esportazione scrive su disco: `_settleLogoIo` lascia completare
+      // l'I/O reale e poi fa avanzare le animazioni di navigazione.
+      await _settleLogoIo(tester);
+
+      expect(
+        find.byKey(const Key('settings-brand-card-error')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('documents-pdf-preview')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('documents-pdf-preview-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('documents-pdf-preview')), findsNothing);
+      expect(button, findsOneWidget);
     });
   });
 }

@@ -63,6 +63,12 @@ const BrandProfile _brandProfile = BrandProfile(
 Uint8List _logoBytes({int width = 24, int height = 12}) =>
     img.encodePng(img.Image(width: width, height: height));
 
+/// SVG valido per l'header: [BrandLogoStore.isSvg] lo riconosce dal `<svg` di
+/// testa e il rendering PDF usa `pw.SvgImage` invece di rasterizzarlo.
+const String _svgLogo =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+    '<rect width="10" height="10" fill="#2888EE"/></svg>';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -469,6 +475,34 @@ void main() {
       expect(content, contains('/Subtype/Image/Width 30/Height 30'));
     });
 
+    test('un logo verticale resta proporzionato all\'altezza 90 pt', () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final brand = await brandWithLogoOnDisk(
+        store,
+        bytes: _logoBytes(width: 12, height: 24),
+      );
+
+      final content = String.fromCharCodes(
+        await DocumentPdfService.instance.buildBytes(_order(), brand: brand),
+      );
+
+      // `BoxFit.contain` su un'immagine 1:2: l'altezza vale logoHeight e la
+      // larghezza la segue (45×90), allineata a sinistra, mai stirata alla
+      // colonna (~257 pt) né compressa.
+      expect(content, contains('q 45 0 0 90 0 0 cm'));
+      expect(
+        content,
+        isNot(contains('q 180 0 0 90 0 0 cm')),
+        reason: 'il logo verticale non può occupare 180 pt di larghezza',
+      );
+      expect(
+        content,
+        isNot(contains('q 90 0 0 90 0 0 cm')),
+        reason: 'non è quadrato',
+      );
+      expect(content, contains('/Subtype/Image/Width 12/Height 24'));
+    });
+
     test('un logo sparito dal disco non rompe l\'export', () async {
       final store = BrandLogoStore(directoryResolver: () async => directory);
       final brand = await brandWithLogoOnDisk(store);
@@ -503,6 +537,25 @@ void main() {
 
       expect(content.startsWith('%PDF-'), isTrue);
       expect(content, contains('Morgante'));
+    });
+
+    test('un logo SVG resta vettoriale nell\'header A4', () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final path = await store.save(Uint8List.fromList(_svgLogo.codeUnits));
+      final brand = _brandProfile.copyWith(logoPath: path);
+
+      final content = String.fromCharCodes(
+        await DocumentPdfService.instance.buildBytes(_order(), brand: brand),
+      );
+
+      expect(content.startsWith('%PDF-'), isTrue);
+      expect(content, contains('%%EOF'));
+      expect(content, contains('Morgante'));
+      // Nessun XObject immagine né posizionamento `Do`: lo SVG non viene
+      // rasterizzato, resta una matrice di scala.
+      expect(content, isNot(contains('/Subtype/Image')));
+      expect(content, isNot(contains(' Do Q')));
+      expect(content, isNot(contains('q 180 0 0 90 0 0 cm')));
     });
   });
 }

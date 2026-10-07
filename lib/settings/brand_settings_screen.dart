@@ -12,10 +12,14 @@ library;
 
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:simple_order_manager/documents/brand_card_pdf.dart';
+import 'package:simple_order_manager/documents/pdf_layout.dart';
+import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_logo_store.dart';
@@ -57,11 +61,23 @@ class _SettingsTabState extends State<SettingsTab> {
   /// Etichetta mostrata sotto l'anteprima del logo (dimensione del file).
   String _logoHint = '';
 
+  /// `true` quando il file salvato è un SVG: in anteprima compare il badge
+  /// vettoriale al posto di `Image.file` (che non sa leggere gli SVG).
+  bool _logoIsSvg = false;
+
+  /// Controllo di qualità del logo salvato. Con livello
+  /// [LogoQualityLevel.lowResolution] compare la didascalia persistente sotto
+  /// l'anteprima; `null` significa nessun logo o nessun avviso.
+  LogoAssessment? _logoQuality;
+
   @override
   void initState() {
     super.initState();
     _draft = widget.brand;
     _syncControllers(_draft);
+    // L'avviso di risoluzione vale anche per immagini caricate in versioni
+    // precedenti: riletto il file da disco in `initState`.
+    _loadLogoQuality();
   }
 
   @override
@@ -112,6 +128,66 @@ class _SettingsTabState extends State<SettingsTab> {
     _applyProfile(update(_draft));
   }
 
+  /// Legge il file del logo salvato, aggiorna il badge SVG e ricalcola
+  /// l'avviso di risoluzione.
+  ///
+  /// Il ricalcolo avviene anche in `initState`: l'avviso vale per le immagini
+  /// caricate in versioni precedenti, non solo per quelle appena scelte.
+  Future<void> _loadLogoQuality() async {
+    final path = _draft.logoPath;
+    if (path == null || path.trim().isEmpty) {
+      _logoIsSvg = false;
+      _logoQuality = null;
+      return;
+    }
+    final bytes = await BrandLogoStore.instance.read(path);
+    if (!mounted) return;
+    setState(() {
+      _logoIsSvg = bytes != null && BrandLogoStore.isSvg(bytes);
+      _logoQuality = assessLogoBytes(bytes);
+    });
+  }
+
+  /// Avviso di bassa risoluzione: il salvataggio non viene bloccato, ma
+  /// l'utente viene informato che il logo verrà mostrato più piccolo.
+  void _warnIfLowResolution(LogoAssessment assessment) {
+    if (!assessment.isLowResolution || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('settings-brand-logo-lowres'),
+        backgroundColor: AppColors.tertiaryFixed,
+        content: Text(
+          assessment.message,
+          style: AppTextStyles.bodySm.copyWith(
+            color: AppColors.onTertiaryFixedVariant,
+          ),
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  /// Applica il risultato di un upload: hint dimensioni, badge SVG e controllo
+  /// di risoluzione, poi notifica il profilo e (se serve) l'avviso.
+  ///
+  /// I byte sono quelli appena caricati, non riletti da disco: `save` non
+  /// cambia le dimensioni (nessun upscaling né ridimensionamento sotto la
+  /// soglia [BrandLogoStore.maxLogoSide]), quindi l'analisi è identica e
+  /// l'I/O aggiuntivo non ritarda la costruzione dell'anteprima.
+  Future<void> _applyUploadedLogo(String path, Uint8List bytes) async {
+    if (!mounted) return;
+    final size = await _fileSize(path);
+    if (!mounted) return;
+    final assessment = assessLogoBytes(bytes);
+    setState(() {
+      _logoHint = _readableSize(size);
+      _logoIsSvg = BrandLogoStore.isSvg(bytes);
+      _logoQuality = assessment;
+    });
+    _applyProfile(_draft.copyWith(logoPath: path));
+    _warnIfLowResolution(assessment);
+  }
+
   /// Sceglie un'immagine dalla galleria, la normalizza e la salva su disco.
   Future<void> _pickLogo() async {
     try {
@@ -124,11 +200,7 @@ class _SettingsTabState extends State<SettingsTab> {
       if (picked == null) return; // utente ha annullato: nessun messaggio
       final raw = await File(picked.path).readAsBytes();
       final path = await BrandLogoStore.instance.save(raw);
-      if (!mounted) return;
-      final size = await _fileSize(path);
-      if (!mounted) return;
-      setState(() => _logoHint = _readableSize(size));
-      _applyProfile(_draft.copyWith(logoPath: path));
+      await _applyUploadedLogo(path, raw);
     } on Object {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,11 +213,44 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  /// Sceglie un file `.svg` e lo salva **grezzo**: la nitidezza vettoriale
+  /// dipende dai byte originali, quindi nessuna normalizzazione raster.
+  ///
+  /// L'annullamento non mostra messaggi; gli errori usano uno snackbar
+  /// dedicato, diverso da quello dei raster.
+  Future<void> _pickSvgLogo() async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['svg'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) return; // annullato
+      final file = picked.files.first;
+      final raw = file.bytes ?? await File(file.path!).readAsBytes();
+      final path = await BrandLogoStore.instance.save(raw);
+      await _applyUploadedLogo(path, raw);
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          key: Key('settings-brand-logo-svg-error'),
+          backgroundColor: AppColors.error,
+          content: Text('File SVG non caricabile: scegli un file .svg valido.'),
+        ),
+      );
+    }
+  }
+
   /// Rimuove il file del logo e azzera il campo `logoPath`.
   Future<void> _removeLogo() async {
     await BrandLogoStore.instance.delete();
     if (!mounted) return;
-    setState(() => _logoHint = '');
+    setState(() {
+      _logoHint = '';
+      _logoIsSvg = false;
+      _logoQuality = null;
+    });
     _applyProfile(_draft.copyWith(clearLogo: true));
   }
 
@@ -284,21 +389,7 @@ class _SettingsTabState extends State<SettingsTab> {
                   color: AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadii.lg),
                 ),
-                child: _draft.hasLogo
-                    ? Image.file(
-                        File(_draft.logoPath!),
-                        fit: BoxFit.contain,
-                        // File sparito o corrotto: icona neutra, nessun crash.
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: AppColors.outline,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.image_outlined,
-                        color: AppColors.outline,
-                      ),
+                child: _logoPreview(),
               ),
               const SizedBox(height: AppSpacing.spaceSm),
               Text(
@@ -310,6 +401,16 @@ class _SettingsTabState extends State<SettingsTab> {
                   color: AppColors.onSurfaceVariant,
                 ),
               ),
+              if (_logoQuality?.isLowResolution == true) ...[
+                const SizedBox(height: AppSpacing.spaceXs),
+                Text(
+                  key: const Key('settings-brand-logo-quality'),
+                  _logoQuality!.message,
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: AppColors.onTertiaryFixedVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.spaceMd),
               Row(
                 children: [
@@ -337,11 +438,67 @@ class _SettingsTabState extends State<SettingsTab> {
                   ],
                 ],
               ),
+              const SizedBox(height: AppSpacing.gutter),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('settings-brand-logo-svg'),
+                  icon: const Icon(Icons.polyline, size: 18),
+                  label: const Text('Carica logo SVG (vettoriale)'),
+                  onPressed: _pickSvgLogo,
+                ),
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  /// Anteprima del logo: SVG (badge vettoriale, `Image.file` non sa leggerli)
+  /// oppure file raster con neutro `errorBuilder` se il file è sparito.
+  Widget _logoPreview() {
+    final Widget child;
+    if (!_draft.hasLogo) {
+      child = const Icon(Icons.image_outlined, color: AppColors.outline);
+    } else if (_logoIsSvg) {
+      child = Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.spaceSm,
+          vertical: AppSpacing.spaceXs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.polyline, size: 18, color: AppColors.onPrimaryContainer),
+            SizedBox(width: AppSpacing.spaceXs),
+            Text(
+              'SVG',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onPrimaryContainer,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      child = Image.file(
+        File(_draft.logoPath!),
+        fit: BoxFit.contain,
+        // File sparito o corrotto: icona neutra, nessun crash.
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.image_not_supported_outlined,
+          color: AppColors.outline,
+        ),
+      );
+    }
+    return child;
   }
 
   Widget _buildContactsCard() {
@@ -470,9 +627,50 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
           const SizedBox(height: AppSpacing.spaceMd),
           BrandHeader(brand: _draft, dense: true),
+          const SizedBox(height: AppSpacing.spaceMd),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('settings-brand-card-preview'),
+              icon: const Icon(Icons.badge_outlined, size: 18),
+              label: const Text('Anteprima biglietto da visita'),
+              onPressed: _exportCardPdf,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  /// Genera il biglietto da visita (85 × 55 mm) dal profilo corrente e lo
+  /// apre nell'anteprima condivisa.
+  ///
+  /// Il pulsante è sempre attivo: serve anche per esplorare il layout con
+  /// modi non ancora modificati. Un fallimento non blocca le altre azioni
+  /// della schermata, segnala solo l'errore.
+  Future<void> _exportCardPdf() async {
+    try {
+      final result = await BrandCardPdfService.instance.export(_draft);
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => DocumentPdfPreviewScreen(
+            result: result,
+            title: 'Biglietto da visita',
+            subject: 'Biglietto da visita di ${_draft.displayName}',
+          ),
+        ),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          key: Key('settings-brand-card-error'),
+          backgroundColor: AppColors.error,
+          content: Text('Esportazione biglietto non riuscita: riprova.'),
+        ),
+      );
+    }
   }
 
   /// Campo di testo con i token del design system (bordo `outlineVariant`,

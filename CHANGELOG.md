@@ -10,6 +10,57 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ## [Unreleased]
 
+### Added
+
+- **Template "biglietto da visita" 85 × 55 mm** condiviso dai documenti:
+  - `lib/documents/pdf_layout.dart` (nuovo): costanti del template
+    (`cardWidthMm` 85, `cardHeightMm` 55, `logoBoxWidthMm` 25, `logoBoxHeightMm` 15,
+    `printDpi` 300), conversioni mm → pt (`mmToPt`, `ptToMm`) e pixel a 300 DPI
+    (`pxAt300Dpi`: **85 → 1004**, **55 → 650**, **25 → 295**, **15 → 177**), più
+    `fitLogoInBox` e `assessLogo`/`usableLogoBytes`. Il modulo è puro (nessuna I/O, nessun
+    plugin) e funge da fonte unica delle regole di logo per l'header A4 e per il biglietto.
+  - `lib/documents/brand_card_pdf.dart` (nuovo): `BrandCardPdfService` genera
+    `biglietto-<slug-brand>.pdf` su una pagina `PdfPageFormat(cardWidthPt, cardHeightPt)`
+    (240,94 × 155,91 pt) con margine di 5 mm. In alto a sinistra il **box logo 25 × 15 mm**
+    (70,87 × 42,52 pt), a destra nome e contatti del mittente, sotto una barra
+    `AppColors.primary` e la riga con il nome + `BIGLIETTO DA VISITA`. Nessun dato del
+    cliente viene stampato oltre al logo, al nome e ai contatti già inseriti.
+  - `lib/settings/brand_settings_screen.dart`: pulsante **"Anteprima biglietto da visita"**
+    (tasto `settings-brand-card-preview`) nella sezione anteprima; genera il PDF e lo apre in
+    `DocumentPdfPreviewScreen`, con snackbar di errore dedicato
+    (`settings-brand-card-error`) che non blocca le altre azioni della schermata.
+- **Logo SVG (vettoriale)**:
+  - `lib/settings/brand_logo_store.dart`: `BrandLogoStore.isSvg` riconosce `<svg` (anche
+    dopo una dichiarazione XML con BOM/spazi), `logoSvgFileName = 'brand/logo.svg'` e
+    `candidateFileNames` (raster + vettoriale). `save()` sceglie l'estensione in base al
+    formato e scrive **grezzi** i byte SVG (nessuna normalizzazione raster); `delete()`
+    rimuove entrambi i file per non lasciare orfani.
+  - `lib/settings/brand_settings_screen.dart`: nuovo ingresso **"Carica logo SVG
+    (vettoriale)"** (`settings-brand-logo-svg`) che usa `file_picker` con
+    `FileType.custom` / `allowedExtensions: ['svg']` e `withData: true`. L'annullamento non
+    mostra messaggi, l'errore usa lo snackbar dedicato `settings-brand-logo-svg-error`. In
+    anteprima il badge **SVG** (`settings-brand-logo-preview` con `Icons.polyline`)
+    sostituisce `Image.file`, che non sa leggere gli SVG.
+  - `lib/documents/document_pdf.dart`: `_brandMark` rende `pw.SvgImage` quando i byte sono
+    un SVG (nitido a qualunque ingrandimento); un SVG malformato viene intercettato e si
+    ricade sull'etichetta testuale, senza far fallire l'esportazione.
+  - `lib/documents/brand_card_pdf.dart`: il box logo del biglietto usa `pw.SvgImage` per i
+    vettoriali e `fitLogoInBox` per i raster.
+- **Avviso di risoluzione del logo**:
+  - `lib/documents/pdf_layout.dart`: `assessLogo` confronta il logo con i **295 × 177 px**
+    richiesti dal box 25 × 15 mm a 300 DPI e restituisce `LogoQualityLevel`
+    (`vector` / `ok` / `lowResolution`) con il messaggio da mostrare; SVG e immagini di
+    dimensione ignota non producono mai avviso e il salvataggio non viene mai bloccato.
+  - `lib/settings/brand_settings_screen.dart`: snackbar `settings-brand-logo-lowres`
+    (colori `tertiaryFixed` / `onTertiaryFixedVariant`) all'upload e didascalia persistente
+    `settings-brand-logo-quality` sotto l'anteprima; l'analisi riletta anche in `initState`
+    così l'avviso vale per le immagini caricate in versioni precedenti.
+- Dipendenza `file_picker: 8.1.6` per la selezione del file SVG.
+- Test: `test/pdf_layout_test.dart` (costanti, conversioni, `fitLogoInBox`, `assessLogo`,
+  `usableLogoBytes`), `test/brand_card_pdf_test.dart` (pagina, box logo, nessun dato del
+  cliente, logo raster senza upscaling, logo SVG) e casi SVG/bassa risoluzione in
+  `test/brand_settings_test.dart` e `test/document_pdf_test.dart`.
+
 ### Changed
 
 - **Area del logo in intestazione ingrandita** (da 168×84 / 132×66 a 240×120 / 180×90), con
@@ -49,6 +100,19 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
     overflow.
   - `test/brand_test.dart`: normalizzazione con ingresso 4096 px ridotto a 2048 px, immagini di
     2048 px o più piccole lasciate inalterate, byte non-immagine restituiti invariati.
+- **Regole di logo condivise fra A4 e biglietto**: le misure e la regola di fitting non sono più
+  ripetute per documento ma derivano tutte da `lib/documents/pdf_layout.dart`.
+  - `lib/documents/document_pdf.dart`: `DocumentPdfService._usableLogo` ora delega a
+    `usableLogoBytes`, che accetta anche gli SVG oltre ai raster riconosciuti da `image`;
+    `_brandMark` renderizza `pw.SvgImage` per i vettoriali e conserva `logoHeight = 90 pt`
+    e `pw.BoxFit.contain` per i raster.
+  - `lib/documents/pdf_layout.dart`: `fitLogoInBox` applica *contain* con scala massima `1.0`,
+    quindi un logo più piccolo del box resta alla **sua dimensione reale** (50 × 50 px →
+    12 × 12 pt) e non viene mai ingrandito; gli esempi di riferimento sono
+    600 × 300 → 70,87 × 35,43 pt, 400 × 400 → 42,52 × 42,52 pt,
+    300 × 600 → 21,26 × 42,52 pt.
+  - `test/design_tokens_test.dart` e la palette `AppColors` restano invariati: l'avviso di
+    bassa risoluzione usa i token esistenti `tertiaryFixed` / `onTertiaryFixedVariant`.
 
 ## [1.5.1] - 2026-10-06
 

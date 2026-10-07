@@ -10,17 +10,18 @@
 /// mostrati nelle card e nell'header "Riepilogo".
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import 'package:simple_order_manager/documents/pdf_layout.dart';
 import 'package:simple_order_manager/models/models.dart';
 import 'package:simple_order_manager/settings/brand_logo_store.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -153,17 +154,11 @@ class DocumentPdfService {
   /// più basso del valore dichiarato qui.
   static const double logoHeight = 90;
 
-  /// I byte del logo sono validi solo se il pacchetto `image` riconosce il
-  /// formato: un file non-immagine (o corrotto) viene ignorato e l'header
-  /// ripiega sul testo, senza far fallire l'esportazione.
-  static Uint8List? _usableLogo(Uint8List? bytes) {
-    if (bytes == null || bytes.isEmpty) return null;
-    try {
-      return img.findDecoderForData(bytes) == null ? null : bytes;
-    } on Object {
-      return null;
-    }
-  }
+  /// I byte del logo sono validi solo se sono un SVG (reso vettoriale) oppure
+  /// se il pacchetto `image` riconosce il formato raster: un file
+  /// non-immagine (o corrotto) viene ignorato e l'header ripiega sul testo,
+  /// senza far fallire l'esportazione.
+  static Uint8List? _usableLogo(Uint8List? bytes) => usableLogoBytes(bytes);
 
   /// Costruisce il documento senza comprimerlo (`compress: false`), così il
   /// contenuto resta ispezionabile nei test.
@@ -408,10 +403,27 @@ class DocumentPdfService {
     );
   }
 
-  /// Marchio: immagine del logo, oppure etichetta di fallback dell'app
-  /// (il nome del mittente va nell blocco contatti a destra).
+  /// Marchio: logo vettoriale SVG (resa a massima nitidezza), immagine raster,
+  /// oppure etichetta di fallback dell'app (il nome del mittente va nel blocco
+  /// contatti a destra).
+  ///
+  /// Un SVG malformato non deve far fallire l'esportazione: il parsing
+  /// avviene nella fabbrica di `pw.SvgImage`, quindi viene intercettato e si
+  /// ricade sull'etichetta testuale.
   static pw.Widget _brandMark(Uint8List? logoBytes) {
     if (logoBytes != null) {
+      if (BrandLogoStore.isSvg(logoBytes)) {
+        try {
+          return pw.SvgImage(
+            svg: utf8.decode(logoBytes),
+            height: logoHeight,
+            fit: pw.BoxFit.contain,
+            alignment: pw.Alignment.centerLeft,
+          );
+        } on Object {
+          return _fallbackBrandMark();
+        }
+      }
       return pw.Image(
         pw.MemoryImage(logoBytes),
         height: logoHeight,
@@ -419,11 +431,14 @@ class DocumentPdfService {
         alignment: pw.Alignment.centerLeft,
       );
     }
-    return pw.Text(
-      _fallbackBrandLabel,
-      style: _style(size: 18, bold: true, color: _pdf(AppColors.primary)),
-    );
+    return _fallbackBrandMark();
   }
+
+  /// Etichetta di nessun logo: marchio dell'app in colore primario.
+  static pw.Widget _fallbackBrandMark() => pw.Text(
+        _fallbackBrandLabel,
+        style: _style(size: 18, bold: true, color: _pdf(AppColors.primary)),
+      );
 
   /// Nome in grassetto + righe di contatto allineate a destra.
   static pw.Widget _brandContacts(BrandProfile brand) {
