@@ -63,6 +63,12 @@ const BrandProfile _brandProfile = BrandProfile(
 Uint8List _logoBytes({int width = 24, int height = 12}) =>
     img.encodePng(img.Image(width: width, height: height));
 
+/// SVG valido per l'header: [BrandLogoStore.isSvg] lo riconosce dal `<svg` di
+/// testa e il rendering PDF usa `pw.SvgImage` invece di rasterizzarlo.
+const String _svgLogo =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+    '<rect width="10" height="10" fill="#2888EE"/></svg>';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -503,6 +509,25 @@ void main() {
 
       expect(content.startsWith('%PDF-'), isTrue);
       expect(content, contains('Morgante'));
+    });
+
+    test('un logo SVG resta vettoriale nell\'header A4', () async {
+      final store = BrandLogoStore(directoryResolver: () async => directory);
+      final path = await store.save(Uint8List.fromList(_svgLogo.codeUnits));
+      final brand = _brandProfile.copyWith(logoPath: path);
+
+      final content = String.fromCharCodes(
+        await DocumentPdfService.instance.buildBytes(_order(), brand: brand),
+      );
+
+      expect(content.startsWith('%PDF-'), isTrue);
+      expect(content, contains('%%EOF'));
+      expect(content, contains('Morgante'));
+      // Nessun XObject immagine né posizionamento `Do`: lo SVG non viene
+      // rasterizzato, resta una matrice di scala.
+      expect(content, isNot(contains('/Subtype/Image')));
+      expect(content, isNot(contains(' Do Q')));
+      expect(content, isNot(contains('q 180 0 0 90 0 0 cm')));
     });
   });
 }

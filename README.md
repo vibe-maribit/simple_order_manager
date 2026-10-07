@@ -1,6 +1,6 @@
 # Simple Order Manager 📱
 
-**Versione corrente: `1.5.1` (build `7`)** — in-app: icona `ⓘ` ("Info & Versione") nelle quattro tab.
+**Versione corrente: `1.6.0` (build `8`)** — in-app: icona `ⓘ` ("Info & Versione") nelle quattro tab.
 
 Applicazione Flutter completa per la gestione offline di preventivi, schede lavoro, anagrafica clienti e catalogo prodotti/servizi (ispirata a *Invoice Simple*, senza emissione di fatture fiscali).
 
@@ -34,9 +34,17 @@ Applicazione Flutter completa per la gestione offline di preventivi, schede lavo
   - Pulsante **Genera PDF e condividi** anche nel bottom sheet di dettaglio del documento, che apre
     con l'intestazione brand in cima (logo + nome e contatti del mittente).
 - **Tab "Impostazioni" → Profilo / Brand**:
-  - Logo del mittente caricato dalla galleria: l'immagine viene normalizzata (PNG, lato massimo
-    2048 px) e salvata in `<appDocuments>/brand/logo.png`; nelle preferenze viene salvato solo il
-    percorso, mai i byte.
+  - Logo del mittente caricato dalla galleria o come file **SVG**: i raster vengono normalizzati
+    (PNG, lato massimo 2048 px, nessun upscaling) e salvati in `<appDocuments>/brand/logo.png`,
+    gli SVG in `<appDocuments>/brand/logo.svg` (byte originali, nessun riconversione); nelle
+    preferenze viene salvato solo il percorso, mai i byte.
+  - Avviso di risoluzione: se il logo è più piccolo dei 295×177 px richiesti dal box logo
+    25×15 mm a 300 DPI, l'upload mostra uno snackbar e la didascalia sotto l'anteprima. Il
+    salvataggio non viene mai bloccato, il logo viene però stampato *più piccolo* per non
+    sgranare. File SVG e immagini di dimensione ignota non producono avviso.
+  - Biglietto da visita **85 × 55 mm** con box logo **25 × 15 mm** in alto a sinistra:
+    pulsante "Anteprima biglietto da visita" nella sezione anteprima che genera il PDF e lo
+    apre nell'anteprima condivisa.
   - Dati del mittente: Nome e cognome, Ruolo/Qualifica, Telefono 1, Telefono 2, Sito web, Email
     principale, Email secondaria.
   - Anteprima **live** dell'intestazione: ciò che si vede qui è ciò che viene stampato nel PDF.
