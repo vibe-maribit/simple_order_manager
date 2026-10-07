@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
-// ==========================================
-// APP INFO (VERSIONING)
-// ==========================================
-
-/// Informazioni di versione dell'applicazione.
+// ===================================// APP INFO (VERSIONING)
+// ============================/// Informazioni di versione dell'applicazione.
 ///
 /// `pubspec.yaml` è la fonte di verità del versioning (Semantic Versioning).
 /// I valori di fallback qui sotto devono coincidere con `version: X.Y.Z+N`

@@ -125,11 +125,11 @@ Il `BUILD` (dopo il `+`) viene sempre incrementato ad ogni release pubblicata.
 
 ```bash
 # Rilascio completo
-vim pubspec.yaml                       # 1) version: 1.3.0+4
+vim pubspec.yaml                       # 1) version: 1.5.0+6
 vim lib/version.dart                   # 2) aggiorna i defaultValue di APP_VERSION / APP_BUILD_NUMBER
-vim CHANGELOG.md                       # 3) nuova sezione ## [1.3.0] - YYYY-MM-DD
+vim CHANGELOG.md                       # 3) nuova sezione ## [1.5.0] - YYYY-MM-DD
 flutter test                           # 4) verifica coerenza
-git commit -am "chore(release): v1.3.0"
-git tag -a v1.3.0 -m "Simple Order Manager v1.3.0"
+git commit -am "chore(release): v1.5.0"
+git tag -a v1.5.0 -m "Simple Order Manager v1.5.0"
 git push origin main --follow-tags
 ```

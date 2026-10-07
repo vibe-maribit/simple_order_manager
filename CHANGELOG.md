@@ -150,7 +150,6 @@ Nessuna modifica in corso.
   appunti: genera il PDF e apre il foglio di condivisione del sistema. Per `Bozza` e `In attesa`
   la copia del riassunto resta invariata.
 - `lib/version.dart` aggiornato ai fallback `1.3.0` / `4`, coerenti con `pubspec.yaml`.
-
 ## [1.2.0] - 2026-10-06
 
 ### Added
@@ -216,7 +215,9 @@ Nessuna modifica in corso.
 - Dashboard con tab `Preventivi/Ordini`, `Clienti` e `Catalogo`.
 - Pipeline GitHub Actions per build e pubblicazione dell'APK Android di release.
 
-[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/vibe-maribit/simple_order_manager/compare/v1.0.0...v1.1.0

@@ -25,7 +25,7 @@ void main() async {
 
 // ==========================================
 // PERSISTENCE (STORAGE SERVICE)
-// ==========================================
+// =========================================
 
 class StorageService {
   static const _keyClients = 'simple_orders_clients_v1';
@@ -248,10 +248,8 @@ class StorageService {
   }
 }
 
-// ==========================================
-// APP ROOT
-// ==========================================
-
+// ===================================// APP ROOT
+// ===================================
 class SimpleOrderManagerApp extends StatelessWidget {
   const SimpleOrderManagerApp({super.key});
 
@@ -266,10 +264,8 @@ class SimpleOrderManagerApp extends StatelessWidget {
   }
 }
 
-// ==========================================
-// MAIN DASHBOARD
-// ==========================================
-
+// ===================================// MAIN DASHBOARD
+// ===================================
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
 
@@ -475,10 +471,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   }
 }
 
-// ==========================================
-// TAB 1: PREVENTIVI & SCHEDE LAVORO
-// ==========================================
-
+// ===================================// TAB 1: PREVENTIVI & SCHEDE LAVORO
+// ===================================
 class OrdersTab extends StatefulWidget {
   final List<WorkOrder> orders;
   final List<Client> clients;
@@ -515,7 +509,6 @@ class OrdersTab extends StatefulWidget {
 /// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
 /// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
 void _noopBrandChange(BrandProfile brand) {}
-
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
   tutti('Tutti'),
@@ -535,6 +528,7 @@ enum _DocumentFilter {
       };
 }
 
+
 /// Frazione di larghezza occupata da ogni KPI card nel carousel orizzontale.
 const double kKpiCardExtentFactor = 0.78;
 
@@ -551,6 +545,22 @@ class _SnapScrollBehavior extends ScrollBehavior {
       const PageScrollPhysics();
 }
 
+
+/// Importo formattato con separatori italiani e simbolo euro (`€ 1.234,56`).
+///
+/// Formattazione minima implementata a mano per non introdurre `intl`.
+String formatEuro(double value) => value < 0
+    ? '-€ ${formatEuroNumber(value.abs())}'
+    : '€ ${formatEuroNumber(value)}';
+
+/// Data in formato italiano abbreviato, es. `06 ott 2026`.
+String formatItalianDate(DateTime date) {
+  final month = kMonthsIt[date.month - 1].toLowerCase();
+  final short = month.length > 4 ? month.substring(0, 3) : month;
+  final day = date.day.toString().padLeft(2, '0');
+  return '$day $short ${date.year}';
+}
+
 class _OrdersTabState extends State<OrdersTab> {
   static const Key kClearSearchKey = Key('documents-clear-search');
   static const Key kSearchFieldKey = Key('documents-search-field');
@@ -558,7 +568,6 @@ class _OrdersTabState extends State<OrdersTab> {
   static const Key kBannerCtaKey = Key('documents-banner-cta');
   static const Key kBannerKey = Key('documents-banner');
   static const Key kKpiCarouselKey = Key('documents-kpi-carousel');
-
   /// Prefissi delle azioni secondarie per chiave di test.
   static String secondaryActionKey(String orderId) =>
       'documents-secondary-action-$orderId';
@@ -584,10 +593,8 @@ class _OrdersTabState extends State<OrdersTab> {
     super.dispose();
   }
 
-  // ==========================================
-  // FORMATTING HELPERS
-  // ==========================================
-
+  // ==========================================  // FORMATTING HELPERS
+  // ===================================
   /// Testo relativo usato nella barra di stato sync.
   String _relativeSyncLabel() {
     final minutes = DateTime.now().difference(_lastSync).inMinutes;
@@ -598,10 +605,8 @@ class _OrdersTabState extends State<OrdersTab> {
     return hours == 1 ? '1 ora fa' : '$hours ore fa';
   }
 
-  // ==========================================
-  // KPI (derivati da _orders)
-  // ==========================================
-
+  // ==========================================  // KPI (derivati da _orders)
+  // ===================================
   /// Numero di documenti che soddisfano [test], insieme al volume `grandTotal`.
   ({int count, double amount}) _aggregate(
     bool Function(WorkOrder) test,
@@ -636,10 +641,8 @@ class _OrdersTabState extends State<OrdersTab> {
         (o) => o.status == OrderStatus.inAttesa,
       );
 
-  // ==========================================
-  // FILTERS
-  // ==========================================
-
+  // ==========================================  // FILTERS
+  // ===================================
   /// Documenti che superano ricerca testuale + chip filtro attivo.
   List<WorkOrder> get _filteredDocuments {
     final query = _searchQuery.trim().toLowerCase();
@@ -682,10 +685,8 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
-  // ==========================================
-  // CARD ACTIONS
-  // ==========================================
-
+  // ==========================================  // CARD ACTIONS
+  // ===================================
   /// Copia negli appunti un riassunto leggibile del documento, per le azioni
   /// che non richiedono un file (bozza e documento in attesa).
   Future<void> _copyDocumentSummary(WorkOrder order) async {
@@ -711,6 +712,19 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
+  /// Azione secondaria della card: copia sempre il riassunto negli appunti,
+  /// poi apre il flusso dedicato allo stato del documento.
+  Future<void> _handleSecondaryAction(WorkOrder order) async {
+    await _copyDocumentSummary(order);
+    if (!mounted) return;
+    switch (order.status) {
+      case OrderStatus.inAttesa:
+        _trackShipment(order);
+      case OrderStatus.bozza:
+        _shareOrder(order);
+      case OrderStatus.approvato:
+      case OrderStatus.completato:
+        break;
   /// Cliente della rubrica associato al documento, se presente.
   Client? _clientFor(WorkOrder order) {
     for (final client in widget.clients) {
@@ -848,6 +862,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     _exportDocumentPdf(order);
                   },
                 ),
+              ),
               ),
               const SizedBox(height: AppSpacing.spaceMd),
               Row(
@@ -1042,10 +1057,8 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
-  // ==========================================
-  // BUILD
-  // ==========================================
-
+  // ==========================================  // BUILD
+  // ===================================
   @override
   Widget build(BuildContext context) {
     final documents = _filteredDocuments;
@@ -1535,7 +1548,6 @@ class _OrdersTabState extends State<OrdersTab> {
           suffixIcon: _searchQuery.isEmpty
               ? null
               : IconButton(
-                  key: kClearSearchKey,
                   icon: const Icon(Icons.close, size: 18),
                   tooltip: 'Cancella ricerca',
                   onPressed: _clearSearch,
@@ -2215,10 +2227,8 @@ class _OrdersTabState extends State<OrdersTab> {
   }
 }
 
-// ==========================================
-// ORDER EDIT / CREATE SCREEN
-// ==========================================
-
+// ===================================// ORDER EDIT / CREATE SCREEN
+// ===================================
 class OrderEditScreen extends StatefulWidget {
   final WorkOrder? existingOrder;
   final List<Client> clients;
@@ -2739,10 +2749,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   }
 }
 
-// ==========================================
-// TAB 2: ANAGRAFICA CLIENTI
-// ==========================================
-
+// ===================================// TAB 2: ANAGRAFICA CLIENTI
+// ===================================
 class ClientsTab extends StatefulWidget {
   final List<Client> clients;
   final ValueChanged<Client> onSaveClient;
@@ -3130,10 +3138,8 @@ class _ClientsTabState extends State<ClientsTab> {
   }
 }
 
-// ==========================================
-// TAB 3: CATALOGO PRODOTTI & SERVIZI
-// ==========================================
-
+// ===================================// TAB 3: CATALOGO PRODOTTI & SERVIZI
+// ===================================
 class CatalogTab extends StatefulWidget {
   final List<CatalogItem> catalog;
   final ValueChanged<CatalogItem> onSaveItem;
