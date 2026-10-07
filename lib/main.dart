@@ -474,6 +474,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         onSaveOrder: _addOrUpdateOrder,
         onDeleteOrder: _deleteOrder,
         onStatusChange: _updateOrderStatus,
+        onOpenSettings: () => setState(() => _currentIndex = 3),
       ),
       ClientsTab(
         clients: _clients,
@@ -552,6 +553,10 @@ class OrdersTab extends StatefulWidget {
   /// compresi): senza configurazione l'app si comporta come prima.
   final EmailSmtpConfig smtpConfig;
 
+  /// Porta alla tab Impostazioni: usato dai fogli Documenti quando la posta
+  /// in uscita non è configurata, come invito a settare il server SMTP.
+  final VoidCallback onOpenSettings;
+
   const OrdersTab({
     super.key,
     required this.orders,
@@ -563,6 +568,7 @@ class OrdersTab extends StatefulWidget {
     this.brand = BrandProfile.empty,
     this.onBrandChange = _noopBrandChange,
     this.smtpConfig = EmailSmtpConfig.empty,
+    this.onOpenSettings = _noopOpenSettings,
   });
 
   @override
@@ -572,6 +578,10 @@ class OrdersTab extends StatefulWidget {
 /// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
 /// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
 void _noopBrandChange(BrandProfile brand) {}
+
+/// Callback neutro per [OrdersTab.onOpenSettings]: nei test la tab non ha un
+/// shell a cui tornare, l'azione resta senza effetto.
+void _noopOpenSettings() {}
 
 /// Filtri segmentati della schermata Documenti.
 enum _DocumentFilter {
@@ -1010,7 +1020,7 @@ class _OrdersTabState extends State<OrdersTab> {
               const SizedBox(height: AppSpacing.spaceMd),
               _buildSummaryBlock(order),
               const SizedBox(height: AppSpacing.spaceMd),
-              if (widget.smtpConfig.isNotEmpty) ...[
+              if (widget.smtpConfig.isValid()) ...[
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -1024,6 +1034,44 @@ class _OrdersTabState extends State<OrdersTab> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.spaceMd),
+              ] else ...[
+                // Posta in uscita non configurata o incompleta: l'azione
+                // resta visibile ma disabilitata, con l'invito esplicito a
+                // impostarla (nessun invio senza una config valida).
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('documents-sign-send-email-disabled'),
+                    icon: const Icon(Icons.mail_outline, size: 18),
+                    label: const Text('Invia via email'),
+                    onPressed: null,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceXs),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        key: const Key('documents-sign-smtp-hint'),
+                        widget.smtpConfig.isEmpty
+                            ? 'Posta in uscita da configurare.'
+                            : 'Posta in uscita non valida: controlla i campi.',
+                        style: AppTextStyles.bodySm.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('documents-sign-open-settings'),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        widget.onOpenSettings();
+                      },
+                      child: const Text('Vai a Impostazioni'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.spaceSm),
               ],
               SizedBox(
                 width: double.infinity,
@@ -2333,7 +2381,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     },
                   ),
                 ),
-                if (widget.smtpConfig.isNotEmpty) ...[
+                if (widget.smtpConfig.isValid()) ...[
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -2346,6 +2394,45 @@ class _OrdersTabState extends State<OrdersTab> {
                         _openEmailComposer(order);
                       },
                     ),
+                  ),
+                ] else ...[
+                  // Stesso invito del foglio "Invia per firma": senza una
+                  // configurazione valida l'invio via email è disabilitato
+                  // e si rimanda alle Impostazioni.
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const Key('documents-detail-send-email-disabled'),
+                      icon: const Icon(Icons.mail_outline),
+                      label: const Text('Invia via email'),
+                      onPressed: null,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          key: const Key('documents-detail-smtp-hint'),
+                          widget.smtpConfig.isEmpty
+                              ? 'Posta in uscita da configurare.'
+                              : 'Posta in uscita non valida: controlla i campi.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        key: const Key('documents-detail-open-settings'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          widget.onOpenSettings();
+                        },
+                        child: const Text('Vai a Impostazioni'),
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -3726,6 +3813,9 @@ class _EmailComposeDialogState extends State<_EmailComposeDialog> {
     _recipient = TextEditingController(text: widget.initialRecipient);
     _subject = TextEditingController(text: widget.initialSubject);
     _body = TextEditingController(text: widget.initialBody);
+    // Configurazione non valida: il messaggio resta visibile e l'invio è
+    // disabilitato (difesa in profondità: l'apertura è già gated a valle).
+    _configError = SmtpEmailService.invalidReason(widget.config);
   }
 
   @override
@@ -3864,7 +3954,11 @@ class _EmailComposeDialogState extends State<_EmailComposeDialog> {
                             )
                           : const Icon(Icons.send, size: 18),
                       label: Text(_sending ? 'Invio…' : 'Invia'),
-                      onPressed: _sending ? null : _submit,
+                      onPressed: (_sending ||
+                              SmtpEmailService.invalidReason(widget.config) !=
+                                  null)
+                          ? null
+                          : _submit,
                     ),
                   ),
                 ],

@@ -61,6 +61,7 @@ Future<void> _pumpOrdersTab(
   List<WorkOrder>? orders,
   List<Client> clients = const <Client>[],
   EmailSmtpConfig smtpConfig = EmailSmtpConfig.empty,
+  VoidCallback? onOpenSettings,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -81,6 +82,7 @@ Future<void> _pumpOrdersTab(
         onSaveOrder: (_) {},
         onDeleteOrder: (_) {},
         onStatusChange: (_, __) {},
+        onOpenSettings: onOpenSettings ?? () {},
       ),
     ),
   );
@@ -205,18 +207,152 @@ void main() {
     });
 
     testWidgets(
-        'un test di connessione con configurazione vuota non va in rete',
+        'con configurazione vuota o incompleta il test resta disabilitato',
         (WidgetTester tester) async {
       await _openSettingsTab(tester);
 
+      ElevatedButton testButton() => tester.widget<ElevatedButton>(
+            find.byKey(const Key('settings-smtp-test')),
+          );
+
+      // Configurazione vuota: nessuna prova di rete possibile.
+      expect(testButton().onPressed, isNull);
       await tester.tap(find.byKey(const Key('settings-smtp-test')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-smtp-test-error')), findsNothing);
+      expect(find.byKey(const Key('settings-smtp-test-ok')), findsNothing);
+
+      // Host compilato ma senza email mittente: ancora disabilitato, con il
+      // motivo visibile sotto i pulsanti.
+      await _enterText(tester, 'settings-smtp-host', 'smtp.example.it');
+      expect(testButton().onPressed, isNull);
+      expect(
+        find.byKey(const Key('settings-smtp-invalid-reason')),
+        findsOneWidget,
+      );
+
+      // Configurazione completa: il test si abilita.
+      await _enterText(tester, 'settings-smtp-port', '587');
+      await _enterText(tester, 'settings-smtp-username', 'info@colormeter.it');
+      await _enterText(tester, 'settings-smtp-password', 'top-secret');
+      await _enterText(tester, 'settings-smtp-fromemail', 'info@colormeter.it');
+      expect(testButton().onPressed, isNotNull);
+      expect(
+        find.byKey(const Key('settings-smtp-invalid-reason')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('porta fuori intervallo: errore inline e test disabilitato', (
+      WidgetTester tester,
+    ) async {
+      await _openSettingsTab(tester);
+
+      await _enterText(tester, 'settings-smtp-host', 'smtp.example.it');
+      await _enterText(tester, 'settings-smtp-port', '99999');
+      await _enterText(tester, 'settings-smtp-fromemail', 'info@colormeter.it');
+
+      expect(
+        find.text('Porta non valida: serve un valore tra 1 e 65535.'),
+        findsOneWidget,
+      );
+      final testButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('settings-smtp-test')),
+      );
+      expect(testButton.onPressed, isNull);
+    });
+
+    testWidgets('il pulsante Salva conferma il salvataggio esplicito', (
+      WidgetTester tester,
+    ) async {
+      await _openSettingsTab(tester);
+
+      await _enterText(tester, 'settings-smtp-host', 'smtp.example.it');
+      await _enterText(tester, 'settings-smtp-username', 'info@colormeter.it');
+      await _enterText(tester, 'settings-smtp-password', 'top-secret');
+      await _enterText(tester, 'settings-smtp-fromemail', 'info@colormeter.it');
+
+      await tester.tap(find.byKey(const Key('settings-smtp-save')));
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const Key('settings-smtp-test-error')),
+        find.byKey(const Key('settings-smtp-saved-snackbar')),
         findsOneWidget,
       );
-      expect(find.byKey(const Key('settings-smtp-test-ok')), findsNothing);
+      final stored = await StorageService.loadSmtpConfig();
+      expect(stored.isValid(), isTrue);
+      expect(stored.host, equals('smtp.example.it'));
+    });
+
+    testWidgets('Salva con una configurazione incompleta avvisa l\'utente', (
+      WidgetTester tester,
+    ) async {
+      await _openSettingsTab(tester);
+
+      await _enterText(tester, 'settings-smtp-host', 'smtp.example.it');
+      await tester.tap(find.byKey(const Key('settings-smtp-save')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('settings-smtp-save-invalid')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('non ancora utilizzabile'), findsOneWidget);
+      // La bozza resta comunque disponibile in locale.
+      final stored = await StorageService.loadSmtpConfig();
+      expect(stored.host, equals('smtp.example.it'));
+      expect(stored.isValid(), isFalse);
+    });
+
+    testWidgets('la sezione SMTP si comprime in un riepilogo di stato', (
+      WidgetTester tester,
+    ) async {
+      await _openSettingsTab(tester);
+      expect(find.byKey(const Key('settings-smtp-card')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('settings-smtp-collapse')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('settings-smtp-card')), findsNothing);
+      expect(
+        find.byKey(const Key('settings-smtp-collapsed-summary')),
+        findsOneWidget,
+      );
+      expect(find.text('Nessun server configurato.'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('settings-smtp-collapse')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-smtp-card')), findsOneWidget);
+    });
+
+    testWidgets('il campo "Da" si precompila dall\'email del brand', (
+      WidgetTester tester,
+    ) async {
+      await _openSettingsTab(tester);
+      await _enterText(tester, 'settings-brand-email1', 'info@colormeter.it');
+
+      // Uscita e rientro nella tab: initState ripropone il prefill.
+      final nav = find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Documenti'),
+      );
+      await tester.tap(nav);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Impostazioni'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final fromEmail = tester.widget<TextField>(
+        find.byKey(const Key('settings-smtp-fromemail')),
+      );
+      expect(fromEmail.controller?.text, equals('info@colormeter.it'));
+      // Il prefill non persiste da solo: finché non si salva o si modifica
+      // un campo, la configurazione salvata resta vuota.
+      expect(await StorageService.loadSmtpConfig(), EmailSmtpConfig.empty);
     });
 
     testWidgets('"Rimuovi" azzera campi, status e configurazione persistita', (
@@ -265,11 +401,62 @@ void main() {
           find.byKey(const Key('documents-detail-send-email')), findsNothing);
     });
 
-    testWidgets('senza posta in uscita il foglio firma non offre l\'email', (
+    testWidgets(
+        'una posta in uscita non valida disabilita l\'invio e indica '
+        'Impostazioni', (WidgetTester tester) async {
+      // Configurazione presente ma incompleta (manca l'host): l'azione non
+      // deve apparire abilitata e il foglio deve rimandare alle Impostazioni.
+      var openedSettings = 0;
+      await _pumpOrdersTab(
+        tester,
+        smtpConfig: _validSmtp.copyWith(host: ''),
+        onOpenSettings: () => openedSettings++,
+      );
+      await _openCard(tester, 'prev-1');
+      await tester
+          .tap(find.byKey(const Key('documents-primary-action-prev-1')));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.byKey(const Key('documents-detail-send-email')), findsNothing);
+      expect(
+        find.byKey(const Key('documents-detail-send-email-disabled')),
+        findsOneWidget,
+      );
+      // Il flusso PDF resta disponibile e invariato.
+      expect(
+          find.byKey(const Key('documents-detail-export-pdf')), findsOneWidget);
+
+      // L'invito a Impostazioni è in coda al foglio: si scende per vederlo.
+      await tester.drag(
+        find.byWidgetPredicate(
+          (widget) => widget is ListView && widget.scrollDirection == Axis.vertical,
+        ),
+        const Offset(0, -400),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('documents-detail-smtp-hint')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Posta in uscita non valida: controlla i campi.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('documents-detail-open-settings')));
+      await tester.pumpAndSettle();
+      expect(openedSettings, 1);
+      expect(find.byKey(const Key('documents-detail-export-pdf')), findsNothing);
+    });
+
+    testWidgets('senza posta in uscita il foglio firma indica Impostazioni', (
       WidgetTester tester,
     ) async {
       _mockClipboard(tester);
-      await _pumpOrdersTab(tester);
+      var openedSettings = 0;
+      await _pumpOrdersTab(tester, onOpenSettings: () => openedSettings++);
       await _openCard(tester, 'bozza-2');
       await tester.ensureVisible(
         find.byKey(const Key('documents-secondary-action-bozza-2')),
@@ -284,9 +471,24 @@ void main() {
         find.textContaining('Invia per firma · ORD-2026-201'),
         findsOneWidget,
       );
+      // L'invio via email resta visibile ma disabilitato, con l'invito ad
+      // aprire le Impostazioni; la condivisione PDF è invariata.
       expect(find.byKey(const Key('documents-sign-send-email')), findsNothing);
       expect(
+        find.byKey(const Key('documents-sign-send-email-disabled')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('documents-sign-smtp-hint')), findsOneWidget);
+      expect(
           find.byKey(const Key('documents-sign-export-pdf')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('documents-sign-open-settings')));
+      await tester.pumpAndSettle();
+      expect(openedSettings, 1);
+      expect(
+        find.textContaining('Invia per firma · ORD-2026-201'),
+        findsNothing,
+      );
     });
 
     testWidgets(

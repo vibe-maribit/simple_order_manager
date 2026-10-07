@@ -260,6 +260,17 @@ Future<void> _openCard(
   await tester.pumpAndSettle();
 }
 
+/// Scorre il foglio di dettaglio fino in fondo: le azioni Modifica/Elimina
+/// stanno in coda e con il blocco "posta in uscita" possono uscire dal
+/// viewport dei test.
+Future<void> _scrollDetailSheetToEnd(WidgetTester tester) async {
+  final sheetScrollable = find.byWidgetPredicate(
+    (widget) => widget is ListView && widget.scrollDirection == Axis.vertical,
+  );
+  await tester.drag(sheetScrollable, const Offset(0, -600));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -564,6 +575,7 @@ void main() {
 
       expect(find.byType(BottomSheet), findsWidgets);
       expect(find.textContaining('Cliente:'), findsWidgets);
+      await _scrollDetailSheetToEnd(tester);
       expect(find.text('Modifica'), findsOneWidget);
       expect(find.text('Elimina'), findsOneWidget);
     });
@@ -677,6 +689,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BottomSheet), findsWidgets);
+      await _scrollDetailSheetToEnd(tester);
       expect(find.text('Modifica'), findsOneWidget);
     });
   });
