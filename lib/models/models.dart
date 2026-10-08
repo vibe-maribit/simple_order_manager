@@ -697,3 +697,115 @@ class EmailSmtpConfig {
         timeoutSeconds,
       );
 }
+
+/// Configurazione dell'inserimento vocale basato su AI (Impostazioni → AI).
+///
+/// Come il profilo e la posta in uscita, la configurazione resta **sul
+/// dispositivo**: la chiave API viene serializzata in chiaro in
+/// `SharedPreferences`, senza vault di sistema (stesse note di
+/// [EmailSmtpConfig]).
+///
+/// - [apiBaseUrl]: endpoint usato per l'elenco dei modelli
+///   (`GET {apiBaseUrl}/models?key=...`). Il valore predefinito è l'host
+///   radice di Google, che non espone i vertici Gemini: viene risolto su
+///   `generativelanguage.googleapis.com/v1beta` da [resolvedApiBaseUrl];
+/// - [apiKey]: chiave di Google AI Studio, obbligatoria per ogni chiamata;
+/// - [chatModel]: modello multimodale che estrae cliente e voci dall'audio
+///   con Structured Outputs (JSON Schema);
+/// - [sttModel]: modello di trascrizione audio, usato in fallback quando il
+///   modello chat non accetta input audio.
+class AiConfig {
+  /// Endpoint dell'API per l'elenco dei modelli (`/models`).
+  final String apiBaseUrl;
+
+  /// Chiave API Gemini (sensibile: vedi le note sulla classe).
+  final String apiKey;
+
+  /// Modello multimodale per l'estrazione strutturata dall'audio.
+  final String chatModel;
+
+  /// Modello di trascrizione audio (fallback quando il chat non supporta
+  /// l'input audio).
+  final String sttModel;
+
+  const AiConfig({
+    this.apiBaseUrl = 'https://googleapis.com',
+    this.apiKey = '',
+    this.chatModel = 'gemini-1.5-flash',
+    this.sttModel = 'gemini-3.5-transcribe',
+  });
+
+  /// Configurazione predefinita: endpoint e modelli già impostati, chiave API
+  /// ancora da compilare nelle Impostazioni AI.
+  static const AiConfig defaults = AiConfig();
+
+  /// Endpoint effettivo usato per le chiamate REST dirette (elenco modelli).
+  ///
+  /// L'host radice predefinito (`https://googleapis.com`) restituisce 404 sui
+  /// vertici Gemini: viene risolto sul dominio effettivo dell'API. Un endpoint
+  /// personalizzato (proxy, Vertex) viene usato senza modifiche.
+  String get resolvedApiBaseUrl {
+    final base = apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (base.isEmpty || base == 'https://googleapis.com') {
+      return 'https://generativelanguage.googleapis.com/v1beta';
+    }
+    return base;
+  }
+
+  /// `true` quando la chiave API è stata compilata.
+  bool get hasApiKey => apiKey.trim().isNotEmpty;
+
+  /// Configurazione utilizzabile per una chiamata reale: endpoint, chiave e
+  /// entrambi i modelli presenti.
+  bool isValid() =>
+      apiBaseUrl.trim().isNotEmpty &&
+      hasApiKey &&
+      chatModel.trim().isNotEmpty &&
+      sttModel.trim().isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+        'apiBaseUrl': apiBaseUrl,
+        'apiKey': apiKey,
+        'chatModel': chatModel,
+        'sttModel': sttModel,
+      };
+
+  /// Parsing **tollerante**: una chiave assente o di tipo errato (JSON
+  /// scritto a mano o da una versione precedente) non lancia eccezioni, ma
+  /// ricade sui valori predefiniti di costruzione.
+  factory AiConfig.fromJson(Map<String, dynamic> json) {
+    String text(Object? value, String fallback) =>
+        value is String && value.trim().isNotEmpty ? value : fallback;
+    return AiConfig(
+      apiBaseUrl: text(json['apiBaseUrl'], 'https://googleapis.com'),
+      apiKey: json['apiKey'] is String ? json['apiKey'] as String : '',
+      chatModel: text(json['chatModel'], 'gemini-1.5-flash'),
+      sttModel: text(json['sttModel'], 'gemini-3.5-transcribe'),
+    );
+  }
+
+  AiConfig copyWith({
+    String? apiBaseUrl,
+    String? apiKey,
+    String? chatModel,
+    String? sttModel,
+  }) {
+    return AiConfig(
+      apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
+      apiKey: apiKey ?? this.apiKey,
+      chatModel: chatModel ?? this.chatModel,
+      sttModel: sttModel ?? this.sttModel,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is AiConfig &&
+      other.apiBaseUrl == apiBaseUrl &&
+      other.apiKey == apiKey &&
+      other.chatModel == chatModel &&
+      other.sttModel == sttModel;
+
+  @override
+  int get hashCode => Object.hash(apiBaseUrl, apiKey, chatModel, sttModel);
+}
