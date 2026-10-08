@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.simple_order_manager">
+    <!-- Registrazione audio per l'inserimento vocale dei preventivi
+         (pulsante microfono in OrderEditScreen). Nessun permesso di storage:
+         la registrazione finisce nella cartella cache dell'app. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="Simple Order Manager"
         android:name="${applicationName}"

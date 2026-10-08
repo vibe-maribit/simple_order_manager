@@ -42,7 +42,10 @@ android {
 
     defaultConfig {
         applicationId "com.example.simple_order_manager"
-        minSdkVersion flutter.minSdkVersion
+        // 23 (Android 6.0) in luogo del default Flutter (21): il plugin
+        // `record` usato dall'inserimento vocale dichiara minSdk 23 e il
+        // manifest merger fallirebbe con un floor più basso.
+        minSdkVersion 23
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

@@ -27,6 +27,7 @@ import 'package:simple_order_manager/documents/pdf_layout.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
 import 'package:simple_order_manager/services/smtp_email_service.dart';
+import 'package:simple_order_manager/settings/ai_settings_screen.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_logo_store.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -40,6 +41,8 @@ class SettingsTab extends StatefulWidget {
     required this.onBrandChange,
     this.smtpConfig = EmailSmtpConfig.empty,
     this.onSmtpConfigChange = _noopSmtpChange,
+    this.aiConfig = AiConfig.defaults,
+    this.onAiConfigChange = _noopAiChange,
   });
 
   /// Profilo brand corrente (logo + contatti).
@@ -59,6 +62,16 @@ class SettingsTab extends StatefulWidget {
   /// (vedi `StorageService.saveSmtpConfig`).
   final ValueChanged<EmailSmtpConfig> onSmtpConfigChange;
 
+  /// Configurazione AI corrente (inserimento vocale, Impostazioni → AI).
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza chiave la sezione compare comunque, da configurare.
+  final AiConfig aiConfig;
+
+  /// Notifica ogni modifica della configurazione AI: il dashboard la
+  /// persiste (vedi `StorageService.saveAiConfig`).
+  final ValueChanged<AiConfig> onAiConfigChange;
+
   @override
   State<SettingsTab> createState() => _SettingsTabState();
 }
@@ -66,6 +79,10 @@ class SettingsTab extends StatefulWidget {
 /// Callback neutro: usato come default di
 /// [SettingsTab.onSmtpConfigChange] quando non è fornito.
 void _noopSmtpChange(EmailSmtpConfig config) {}
+
+/// Callback neutro: usato come default di [SettingsTab.onAiConfigChange]
+/// quando non è fornito.
+void _noopAiChange(AiConfig config) {}
 
 class _SettingsTabState extends State<SettingsTab> {
   final _fullName = TextEditingController();
@@ -517,6 +534,8 @@ class _SettingsTabState extends State<SettingsTab> {
           _buildPreviewCard(),
           const SizedBox(height: AppSpacing.spaceLg),
           _buildSmtpCard(),
+          const SizedBox(height: AppSpacing.spaceLg),
+          _buildAiCard(),
         ],
       ),
     );
@@ -1083,6 +1102,80 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Blocco "Intelligenza Artificiale (AI/STT)": stato della configurazione
+  /// e collegamento alla schermata dedicata (endpoint, chiave, modelli).
+  Widget _buildAiCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(
+          'Intelligenza Artificiale (AI/STT)',
+          'Crea preventivi parlando: l\'audio registrato viene trascritto e '
+              'cliente e voci compilati da Gemini.',
+        ),
+        const SizedBox(height: AppSpacing.spaceMd),
+        Container(
+          key: const Key('settings-ai-section'),
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.spaceMd),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(AppRadii.xl),
+            border: Border.all(color: AppColors.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.aiConfig.isValid()
+                    ? 'Configurata · chat ${widget.aiConfig.chatModel} · '
+                        'trascrizione ${widget.aiConfig.sttModel}'
+                    : 'Non configurata: serve la chiave API Gemini per '
+                        'usare il microfono nel preventivo.',
+                key: const Key('settings-ai-summary'),
+                style: AppTextStyles.labelSm.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceMd),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('settings-ai-configure'),
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: const Text('Configura AI'),
+                  onPressed: _openAiSettings,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceSm),
+              Text(
+                'La chiave API resta solo su questo dispositivo e non compare '
+                'mai nei messaggi di errore.',
+                style: AppTextStyles.bodySm.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Apre la schermata di configurazione AI passando lo stato corrente e il
+  /// callback di salvataggio del dashboard.
+  void _openAiSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (ctx) => AiSettingsScreen(
+          aiConfig: widget.aiConfig,
+          onAiConfigChange: widget.onAiConfigChange,
+        ),
+      ),
     );
   }
 

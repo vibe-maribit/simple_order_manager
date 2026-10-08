@@ -31,6 +31,18 @@ dependencies:
   # (`dart:io`, nessun plugin di piattaforma). Pin esatto (stessa policy di
   # image_picker/file_picker).
   enough_mail: 2.1.6
+  # Registrazione audio AAC/M4A per l'inserimento vocale dei preventivi
+  # (pulsante microfono in OrderEditScreen). Pin esatto: le release 7.x
+  # potrebbero alzare il floor dello SDK oltre Dart 3.6.
+  record: 6.1.2
+  # Permessi runtime (microfono) richiesti da `record` su Android/iOS.
+  permission_handler: 11.4.0
+  # Integrazione Gemini: chiamate generateContent con Structured Outputs
+  # (JSON Schema) per estrarre cliente e voci dall'audio.
+  google_generative_ai: 0.4.3
+  # Chiamate dirette ai vertici REST di Google (elenco `/models` per la
+  # sincronizzazione dinamica dei modelli nelle impostazioni AI).
+  http: 1.3.0
 
 dev_dependencies:
   flutter_test:

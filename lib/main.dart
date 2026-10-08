@@ -3,12 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:simple_order_manager/documents/document_pdf.dart';
 import 'package:simple_order_manager/documents/pdf_preview_screen.dart';
 import 'package:simple_order_manager/models/models.dart';
+import 'package:simple_order_manager/services/gemini_stt_service.dart';
 import 'package:simple_order_manager/services/smtp_email_service.dart';
+import 'package:simple_order_manager/settings/ai_settings_screen.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_settings_screen.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
@@ -39,6 +44,10 @@ class StorageService {
 
   /// Configurazione SMTP (posta in uscita): JSON con credenziali locali.
   static const _keySmtp = 'simple_orders_smtp_v1';
+
+  /// Configurazione AI (inserimento vocale): JSON con endpoint, chiave API
+  /// e modelli Gemini.
+  static const _keyAiConfig = 'simple_orders_ai_v1';
 
   static Future<List<Client>> loadClients() async {
     final prefs = await SharedPreferences.getInstance();
@@ -152,6 +161,30 @@ class StorageService {
   static Future<void> clearSmtpConfig() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keySmtp);
+  }
+
+  /// Legge la configurazione AI dell'inserimento vocale.
+  ///
+  /// Come per il brand **non esiste un seed**: chiave assente, stringa vuota
+  /// o JSON corrotto ⇒ [AiConfig.defaults] (endpoint e modelli predefiniti,
+  /// chiave ancora da compilare), senza eccezioni.
+  static Future<AiConfig> loadAiConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyAiConfig);
+    if (raw == null || raw.isEmpty) return AiConfig.defaults;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return AiConfig.fromJson(json);
+    } catch (_) {
+      return AiConfig.defaults;
+    }
+  }
+
+  /// Salva la configurazione AI (chiave API inclusa: storage locale del
+  /// dispositivo, vedi [AiConfig]).
+  static Future<void> saveAiConfig(AiConfig config) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAiConfig, jsonEncode(config.toJson()));
   }
 
   static List<Client> _seedClients() {
@@ -324,6 +357,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   /// native (condivisione PDF).
   EmailSmtpConfig _smtpConfig = EmailSmtpConfig.empty;
 
+  /// Configurazione AI dell'inserimento vocale (endpoint, chiave, modelli).
+  AiConfig _aiConfig = AiConfig.defaults;
+
   @override
   void initState() {
     super.initState();
@@ -339,12 +375,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       StorageService.loadOrders(),
       StorageService.loadBrand(),
       StorageService.loadSmtpConfig(),
+      StorageService.loadAiConfig(),
     ]);
     final clients = loaded[0] as List<Client>;
     final catalog = loaded[1] as List<CatalogItem>;
     final orders = loaded[2] as List<WorkOrder>;
     final brand = loaded[3] as BrandProfile;
     final smtpConfig = loaded[4] as EmailSmtpConfig;
+    final aiConfig = loaded[5] as AiConfig;
 
     if (mounted) {
       setState(() {
@@ -353,6 +391,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         _orders = orders;
         _brand = brand;
         _smtpConfig = smtpConfig;
+        _aiConfig = aiConfig;
         _isLoading = false;
       });
     }
@@ -458,6 +497,14 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     StorageService.saveSmtpConfig(config);
   }
 
+  // --- AI Actions ---
+  /// Persiste la configurazione AI dell'inserimento vocale (stesso ritmo
+  /// della posta in uscita: nessuna perdita tra Impostazioni e Documenti).
+  void _updateAiConfig(AiConfig config) {
+    setState(() => _aiConfig = config);
+    StorageService.saveAiConfig(config);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -471,9 +518,11 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         catalog: _catalog,
         brand: _brand,
         smtpConfig: _smtpConfig,
+        aiConfig: _aiConfig,
         onSaveOrder: _addOrUpdateOrder,
         onDeleteOrder: _deleteOrder,
         onStatusChange: _updateOrderStatus,
+        onAiConfigChange: _updateAiConfig,
         onOpenSettings: () => setState(() => _currentIndex = 3),
       ),
       ClientsTab(
@@ -491,6 +540,8 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         onBrandChange: _updateBrand,
         smtpConfig: _smtpConfig,
         onSmtpConfigChange: _updateSmtpConfig,
+        aiConfig: _aiConfig,
+        onAiConfigChange: _updateAiConfig,
       ),
     ];
 
@@ -553,6 +604,17 @@ class OrdersTab extends StatefulWidget {
   /// compresi): senza configurazione l'app si comporta come prima.
   final EmailSmtpConfig smtpConfig;
 
+  /// Configurazione AI corrente: alimenta il pulsante microfono della
+  /// schermata di editing (inserimento vocale del preventivo).
+  ///
+  /// Ha un default per non rompere le costruzioni esistenti della tab (test
+  /// compresi): senza chiave il microfono invita a configurare l'AI.
+  final AiConfig aiConfig;
+
+  /// Persiste la configurazione AI aggiornata dal microfono (fallback del
+  /// modello deprecato o apertura delle Impostazioni AI in linea).
+  final ValueChanged<AiConfig> onAiConfigChange;
+
   /// Porta alla tab Impostazioni: usato dai fogli Documenti quando la posta
   /// in uscita non è configurata, come invito a settare il server SMTP.
   final VoidCallback onOpenSettings;
@@ -568,6 +630,8 @@ class OrdersTab extends StatefulWidget {
     this.brand = BrandProfile.empty,
     this.onBrandChange = _noopBrandChange,
     this.smtpConfig = EmailSmtpConfig.empty,
+    this.aiConfig = AiConfig.defaults,
+    this.onAiConfigChange = _noopAiChange,
     this.onOpenSettings = _noopOpenSettings,
   });
 
@@ -578,6 +642,11 @@ class OrdersTab extends StatefulWidget {
 /// Callback neutro: la tab Documenti non modifica mai il profilo, serve solo a
 /// soddisfare il tipo di [OrdersTab.onBrandChange] quando non è fornito.
 void _noopBrandChange(BrandProfile brand) {}
+
+/// Callback neutro per [OrdersTab.onAiConfigChange]: il microfono della
+/// schermata di editing usa lo stesso default quando la tab non ha una shell
+/// che persiste la configurazione (test).
+void _noopAiChange(AiConfig config) {}
 
 /// Callback neutro per [OrdersTab.onOpenSettings]: nei test la tab non ha un
 /// shell a cui tornare, l'azione resta senza effetto.
@@ -2518,6 +2587,8 @@ class _OrdersTabState extends State<OrdersTab> {
           existingOrder: existing,
           clients: widget.clients,
           catalog: widget.catalog,
+          aiConfig: widget.aiConfig,
+          onAiConfigChange: widget.onAiConfigChange,
           onSave: widget.onSaveOrder,
         ),
       ),
@@ -2533,11 +2604,22 @@ class OrderEditScreen extends StatefulWidget {
   final List<CatalogItem> catalog;
   final ValueChanged<WorkOrder> onSave;
 
+  /// Configurazione AI che alimenta il pulsante microfono (inserimento
+  /// vocale). Ha un default per non rompere le costruzioni esistenti della
+  /// schermata (test compresi).
+  final AiConfig aiConfig;
+
+  /// Persiste la configurazione AI aggiornata in questa schermata (fallback
+  /// sul modello deprecato o apertura delle Impostazioni AI in linea).
+  final ValueChanged<AiConfig> onAiConfigChange;
+
   const OrderEditScreen({
     super.key,
     this.existingOrder,
     required this.clients,
     required this.catalog,
+    this.aiConfig = AiConfig.defaults,
+    this.onAiConfigChange = _noopAiChange,
     required this.onSave,
   });
 
@@ -2552,9 +2634,23 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   late List<OrderItem> _items;
   final TextEditingController _notesController = TextEditingController();
 
+  /// Copia locale della configurazione AI: il fallback del modello deprecato
+  /// la aggiorna a runtime senza che questa rotta debba essere ricostruita.
+  late AiConfig _aiConfig;
+
+  /// Registratore audio AAC/M4A dell'inserimento vocale.
+  final AudioRecorder _recorder = AudioRecorder();
+
+  /// `true` mentre il microfono è attivo (icona rossa "ferma").
+  bool _isRecording = false;
+
+  /// `true` mentre l'audio viene inviato/parsato (indicatore in AppBar).
+  bool _isProcessingAudio = false;
+
   @override
   void initState() {
     super.initState();
+    _aiConfig = widget.aiConfig;
     if (widget.existingOrder != null) {
       _orderNumber = widget.existingOrder!.orderNumber;
       _selectedClient = widget.clients.firstWhere(
@@ -2584,6 +2680,24 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       _status = OrderStatus.bozza;
       _items = [];
     }
+  }
+
+  @override
+  void dispose() {
+    if (_isRecording) {
+      _recorder.stop().ignore();
+    }
+    _recorder.dispose().ignore();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  /// Salva la configurazione AI usata in questa schermata (locale + store del
+  /// dashboard): così il retry dopo il fallback modello vede già il nuovo
+  /// valore senza ricostruire il widget.
+  void _saveAiConfig(AiConfig config) {
+    setState(() => _aiConfig = config);
+    widget.onAiConfigChange(config);
   }
 
   double get _subtotal => _items.fold(0.0, (sum, i) => sum + i.subtotal);
@@ -2694,6 +2808,307 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     );
   }
 
+  // --- Inserimento vocale (AI/STT) ---
+
+  /// Pulsante microfono dell'AppBar: ferma la registrazione, oppure fa girare
+  /// un indicatore mentre l'audio viene analizzato da Gemini.
+  Widget _voiceButton() {
+    if (_isProcessingAudio) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.spaceSm),
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: AppColors.primary,
+          ),
+        ),
+      );
+    }
+    final recording = _isRecording;
+    return IconButton(
+      key: const Key('order-edit-voice-button'),
+      tooltip: recording ? 'Ferma registrazione' : 'Crea da audio',
+      onPressed: recording ? _stopRecording : _startRecording,
+      icon: Container(
+        padding: const EdgeInsets.all(AppSpacing.spaceXs),
+        decoration: BoxDecoration(
+          color: recording ? AppColors.error : AppColors.surfaceContainerHigh,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          recording ? Icons.stop : Icons.mic_none_outlined,
+          size: 20,
+          color: recording ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  /// Avvia la registrazione in cache app (`voice_order_*.m4a`, AAC 16 kHz).
+  ///
+  /// Prima verifica la configurazione AI (senza chiave non ha senso
+  /// registrare) e il permesso microfono, poi passa a stato "recording".
+  Future<void> _startRecording() async {
+    if (_isRecording || _isProcessingAudio) return;
+
+    if (!_aiConfig.isValid()) {
+      _showVoiceMessage(
+        'Inserimento vocale da configurare: manca la chiave API Gemini.',
+        warning: true,
+        actionLabel: 'Configura',
+        onAction: _openAiSettings,
+      );
+      return;
+    }
+
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      if (!mounted) return;
+      _showVoiceMessage(
+        'Permesso microfono negato: non posso registrare la voce.',
+        error: true,
+      );
+      return;
+    }
+    if (!await _recorder.hasPermission()) {
+      if (!mounted) return;
+      _showVoiceMessage(
+        'Permesso microfono negato: non posso registrare la voce.',
+        error: true,
+      );
+      return;
+    }
+
+    final String path;
+    try {
+      final dir = await getTemporaryDirectory();
+      path =
+          '${dir.path}/voice_order_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 48000,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+    } on Object {
+      if (!mounted) return;
+      _showVoiceMessage('Registrazione non avviata: riprova.', error: true);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isRecording = true);
+  }
+
+  /// Ferma la registrazione e consegna il file `.m4a` a Gemini per
+  /// l'estrazione di cliente e voci.
+  Future<void> _stopRecording() async {
+    if (!_isRecording) return;
+
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } on Object {
+      path = null;
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _isRecording = false;
+      _isProcessingAudio = path != null && path.isNotEmpty;
+    });
+    if (path == null || path.isEmpty) {
+      _showVoiceMessage('Registrazione non riuscita: riprova.', error: true);
+      return;
+    }
+    await _processAudio(File(path));
+  }
+
+  /// Invia l'audio a Gemini, applica la bozza risultante e cancella il file
+  /// temporaneo in ogni caso (anche su errore o schermata chiusa).
+  Future<void> _processAudio(File audioFile) async {
+    try {
+      final draft = await GeminiSttService.instance
+          .extractOrderFromAudioWithModelFallback(
+            context: context,
+            config: _aiConfig,
+            onConfigSaved: _saveAiConfig,
+            audioFile: audioFile,
+          );
+      if (!mounted) return;
+      _applyVoiceDraft(draft);
+    } on GeminiSttException catch (error) {
+      if (!mounted) return;
+      _showVoiceMessage(error.message, error: true);
+    } on Object {
+      if (!mounted) return;
+      _showVoiceMessage('Elaborazione audio non riuscita: riprova.', error: true);
+    } finally {
+      try {
+        if (await audioFile.exists()) {
+          await audioFile.delete();
+        }
+      } on Object {
+        // Il file vive in cache: se la cancellazione fallisce si riproverà
+        // con la pulizia del sistema operativo.
+      }
+      if (mounted) {
+        setState(() => _isProcessingAudio = false);
+      }
+    }
+  }
+
+  /// Compila la scheda con la bozza estratta: cliente (match sull'anagrafica)
+  /// e voci (match sul catalogo per ereditare prezzi e tasse).
+  void _applyVoiceDraft(VoiceOrderDraft draft) {
+    var clientMatched = false;
+    final requestedClient = draft.customerName.trim();
+    if (requestedClient.isNotEmpty) {
+      final match = _matchClientByName(requestedClient);
+      if (match != null) {
+        setState(() => _selectedClient = match);
+        clientMatched = true;
+      }
+    }
+
+    final unmatched = <String>[];
+    var seq = 0;
+    setState(() {
+      for (final line in draft.lines) {
+        final name = line.productName.trim();
+        if (name.isEmpty) continue;
+        seq += 1;
+        final catalogMatch = _findCatalogItem(name);
+        _items.add(
+          OrderItem(
+            id: '${DateTime.now().microsecondsSinceEpoch}_$seq',
+            catalogItemId: catalogMatch?.id ?? '',
+            name: catalogMatch?.name ?? name,
+            description: catalogMatch?.description ?? '',
+            unitPrice: catalogMatch?.unitPrice ?? 0.0,
+            taxRate: catalogMatch?.taxRate ?? 22.0,
+            quantity: line.quantity,
+          ),
+        );
+        if (catalogMatch == null) unmatched.add(name);
+      }
+    });
+
+    final notes = StringBuffer();
+    notes.write('Da audio: ');
+    if (requestedClient.isEmpty) {
+      notes.write('nessun cliente citato');
+    } else {
+      notes.write(
+        clientMatched ? 'cliente $requestedClient' : 'cliente non trovato',
+      );
+    }
+    notes.write(' · ${draft.lines.length} voci');
+    if (unmatched.isNotEmpty) {
+      notes.write(' · senza prezzo: ${unmatched.join(', ')}');
+    }
+    final hasIssues = !clientMatched || unmatched.isNotEmpty;
+    _showVoiceMessage(
+      notes.toString(),
+      warning: hasIssues,
+      duration: const Duration(seconds: 6),
+    );
+  }
+
+  /// Match del cliente citato: esatto, poi parziale, su nome minuscolo.
+  Client? _matchClientByName(String name) {
+    final needle = _normalizeVoiceName(name);
+    Client? partial;
+    for (final client in widget.clients) {
+      final candidate = _normalizeVoiceName(client.name);
+      if (candidate == needle) return client;
+      if (partial == null &&
+          (candidate.contains(needle) || needle.contains(candidate))) {
+        partial = client;
+      }
+    }
+    return partial;
+  }
+
+  /// Match del prodotto dettato nel catalogo: esatto, poi parziale, su nome
+  /// minuscolo normalizzato.
+  CatalogItem? _findCatalogItem(String productName) {
+    final needle = _normalizeVoiceName(productName);
+    if (needle.isEmpty) return null;
+    CatalogItem? partial;
+    for (final item in widget.catalog) {
+      final candidate = _normalizeVoiceName(item.name);
+      if (candidate == needle) return item;
+      if (partial == null &&
+          (candidate.contains(needle) || needle.contains(candidate))) {
+        partial = item;
+      }
+    }
+    return partial;
+  }
+
+  /// Minuscolo + spazi singoli: " panino   caldo " e "Panino Caldo" matchano.
+  static String _normalizeVoiceName(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Apre la configurazione AI (endpoint, chiave, modelli) senza uscire dalla
+  /// scheda del preventivo.
+  Future<void> _openAiSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (ctx) => AiSettingsScreen(
+          aiConfig: _aiConfig,
+          onAiConfigChange: _saveAiConfig,
+        ),
+      ),
+    );
+  }
+
+  /// Snack di ritorno dell'inserimento vocale: errori in rosso, warning in
+  /// ambra (cliente/voci non riconosciuti), successi con il tema di default.
+  void _showVoiceMessage(
+    String message, {
+    bool error = false,
+    bool warning = false,
+    Duration duration = const Duration(seconds: 4),
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('order-edit-voice-message'),
+        backgroundColor: error
+            ? AppColors.error
+            : warning
+            ? AppColors.tertiaryFixed
+            : null,
+        content: Text(
+          message,
+          style: error || !warning
+              ? null
+              : AppTextStyles.bodySm.copyWith(
+                  color: AppColors.onTertiaryFixedVariant,
+                ),
+        ),
+        duration: duration,
+        action: actionLabel != null && onAction != null
+            ? SnackBarAction(
+                key: const Key('order-edit-voice-message-action'),
+                label: actionLabel,
+                onPressed: onAction,
+              )
+            : null,
+      ),
+    );
+  }
+
   void _saveOrder() {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2731,7 +3146,9 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               : 'Modifica Preventivo',
         ),
         actions: [
+          _voiceButton(),
           IconButton(
+            key: const Key('order-edit-save'),
             icon: const Icon(Icons.check),
             onPressed: _saveOrder,
             tooltip: 'Salva Preventivo',
