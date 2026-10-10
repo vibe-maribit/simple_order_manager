@@ -2661,6 +2661,9 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   late List<OrderItem> _items;
   final TextEditingController _notesController = TextEditingController();
 
+  /// Mostra il nome del cliente selezionato nel campo di sola lettura.
+  final TextEditingController _clientController = TextEditingController();
+
   /// Copia locale della configurazione AI: il fallback del modello deprecato
   /// la aggiorna a runtime senza che questa rotta debba essere ricostruita.
   late AiConfig _aiConfig;
@@ -2709,6 +2712,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       _status = OrderStatus.bozza;
       _items = [];
     }
+    _clientController.text = _selectedClient.name;
   }
 
   @override
@@ -2718,6 +2722,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     }
     _recorder.dispose().ignore();
     _notesController.dispose();
+    _clientController.dispose();
     super.dispose();
   }
 
@@ -3002,7 +3007,10 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     if (requestedClient.isNotEmpty) {
       final match = _matchClientByName(requestedClient);
       if (match != null) {
-        setState(() => _selectedClient = match);
+        setState(() {
+          _selectedClient = match;
+          _clientController.text = match.name;
+        });
         clientMatched = true;
       }
     }
@@ -3236,22 +3244,17 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<Client>(
-                    value: _selectedClient,
+                  TextFormField(
+                    key: const Key('client-picker-field'),
+                    readOnly: true,
+                    controller: _clientController,
                     decoration: const InputDecoration(
                       labelText: 'Cliente Selezionato',
                       prefixIcon: Icon(Icons.person),
                       border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.search),
                     ),
-                    items: widget.clients
-                        .map(
-                          (c) =>
-                              DropdownMenuItem(value: c, child: Text(c.name)),
-                        )
-                        .toList(),
-                    onChanged: (c) {
-                      if (c != null) setState(() => _selectedClient = c);
-                    },
+                    onTap: _showClientPicker,
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -3482,34 +3485,163 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       return;
     }
 
+    var query = '';
     showModalBottomSheet(
       context: context,
-      builder: (ctx) => ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: widget.catalog.length,
-        itemBuilder: (_, i) {
-          final cat = widget.catalog[i];
-          return ListTile(
-            title: Text(
-              cat.name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final q = query.trim().toLowerCase();
+          final filtered = widget.catalog.where((item) {
+            if (q.isEmpty) return true;
+            return item.name.toLowerCase().contains(q) ||
+                item.description.toLowerCase().contains(q) ||
+                item.unitOfMeasure.toLowerCase().contains(q) ||
+                item.currency.toLowerCase().contains(q) ||
+                item.discount.toLowerCase().contains(q);
+          }).toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.8,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: AppSearchField(
+                    key: const Key('catalog-picker-search-field'),
+                    hintText: 'Cerca articolo...',
+                    onChanged: (value) =>
+                        setModalState(() => query = value),
+                  ),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('Nessun articolo trovato per la ricerca'),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final cat = filtered[i];
+                            return ListTile(
+                              title: Text(
+                                cat.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                [
+                                  '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
+                                  if (cat.unitOfMeasure.isNotEmpty) 'UM ${cat.unitOfMeasure}',
+                                  if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
+                                  if (cat.description.isNotEmpty) cat.description,
+                                ].join(' · '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: ElevatedButton(
+                                onPressed: () {
+                                  _addItemFromCatalog(cat);
+                                  Navigator.pop(ctx);
+                                },
+                                child: const Text('Seleziona'),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-            subtitle: Text(
-              [
-                '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
-                if (cat.unitOfMeasure.isNotEmpty) 'UM ${cat.unitOfMeasure}',
-                if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
-                if (cat.description.isNotEmpty) cat.description,
-              ].join(' · '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: ElevatedButton(
-              onPressed: () {
-                _addItemFromCatalog(cat);
-                Navigator.pop(ctx);
-              },
-              child: const Text('Seleziona'),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showClientPicker() {
+    if (widget.clients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Non ci sono clienti in rubrica.'),
+        ),
+      );
+      return;
+    }
+    var query = '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final q = query.trim().toLowerCase();
+          final filtered = widget.clients.where((c) {
+            if (q.isEmpty) return true;
+            return c.name.toLowerCase().contains(q) ||
+                c.phone.toLowerCase().contains(q) ||
+                c.email.toLowerCase().contains(q);
+          }).toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: AppSearchField(
+                    key: const Key('client-picker-search-field'),
+                    hintText: 'Cerca cliente per nome, telefono, email...',
+                    onChanged: (value) =>
+                        setModalState(() => query = value),
+                  ),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('Nessun cliente trovato per la ricerca'),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final client = filtered[i];
+                            final selected = client.id == _selectedClient.id;
+                            return ListTile(
+                              leading: CircleAvatar(
+                                child: Text(
+                                  client.name.isEmpty
+                                      ? '?'
+                                      : client.name
+                                          .substring(0, 1)
+                                          .toUpperCase(),
+                                ),
+                              ),
+                              title: Text(client.name),
+                              subtitle: Text(
+                                [client.phone, client.email]
+                                    .where((e) => e.isNotEmpty)
+                                    .join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: selected
+                                  ? const Icon(Icons.check, color: AppColors.primary)
+                                  : null,
+                              onTap: () {
+                                setState(() {
+                                  _selectedClient = client;
+                                  _clientController.text = client.name;
+                                });
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
           );
         },
@@ -3540,10 +3672,14 @@ class ClientsTab extends StatefulWidget {
 ///
 /// Usa i token del design system: riempimento `surfaceContainerLowest` e
 /// raggio [AppRadii.xl].
-InputDecoration appSearchFieldDecoration(String hintText) {
+InputDecoration appSearchFieldDecoration(
+  String hintText, {
+  Widget? suffixIcon,
+}) {
   return InputDecoration(
     hintText: hintText,
     prefixIcon: const Icon(Icons.search, size: 20),
+    suffixIcon: suffixIcon,
     filled: true,
     fillColor: AppColors.surfaceContainerLowest,
     contentPadding: const EdgeInsets.symmetric(
@@ -3569,14 +3705,43 @@ InputDecoration appSearchFieldDecoration(String hintText) {
 ///
 /// Aggiunge all'input l'ombra leggera prevista dal design system: colore
 /// derivato da `onSurface` all'8%, raggio [AppRadii.xl].
-class AppSearchField extends StatelessWidget {
-  const AppSearchField({super.key, required this.hintText, this.onChanged});
+class AppSearchField extends StatefulWidget {
+  const AppSearchField({
+    super.key,
+    required this.hintText,
+    this.onChanged,
+    this.controller,
+  });
 
   final String hintText;
   final ValueChanged<String>? onChanged;
+  final TextEditingController? controller;
+
+  @override
+  State<AppSearchField> createState() => _AppSearchFieldState();
+}
+
+class _AppSearchFieldState extends State<AppSearchField> {
+  late final TextEditingController _controller =
+      widget.controller ?? TextEditingController();
+
+  @override
+  void dispose() {
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _clear() {
+    _controller.clear();
+    widget.onChanged?.call('');
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final query = _controller.text;
     return DecoratedBox(
       decoration: const BoxDecoration(
         borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
@@ -3589,9 +3754,23 @@ class AppSearchField extends StatelessWidget {
         ],
       ),
       child: TextField(
+        controller: _controller,
+        onChanged: (val) {
+          widget.onChanged?.call(val);
+          setState(() {});
+        },
         style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
-        decoration: appSearchFieldDecoration(hintText),
-        onChanged: onChanged,
+        decoration: appSearchFieldDecoration(
+          widget.hintText,
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  key: const Key('app-search-field-clear'),
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Cancella ricerca',
+                  onPressed: _clear,
+                ),
+        ),
       ),
     );
   }
@@ -3602,11 +3781,14 @@ class _ClientsTabState extends State<ClientsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final q = _searchQuery.trim().toLowerCase();
     final filtered = widget.clients.where((c) {
-      final q = _searchQuery.toLowerCase();
+      if (q.isEmpty) return true;
       return c.name.toLowerCase().contains(q) ||
           c.phone.toLowerCase().contains(q) ||
-          c.email.toLowerCase().contains(q);
+          c.email.toLowerCase().contains(q) ||
+          c.address.toLowerCase().contains(q) ||
+          c.notes.toLowerCase().contains(q);
     }).toList();
 
     return Scaffold(
@@ -3623,6 +3805,7 @@ class _ClientsTabState extends State<ClientsTab> {
               vertical: AppSpacing.spaceSm,
             ),
             child: AppSearchField(
+              key: const Key('clients-search-field'),
               hintText: 'Cerca cliente per nome, telefono, email...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
@@ -3637,19 +3820,21 @@ class _ClientsTabState extends State<ClientsTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.person_off_outlined,
                     size: 64,
                     color: AppColors.outline,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Nessun cliente trovato',
-                    style: TextStyle(
+                    widget.clients.isEmpty
+                        ? 'Nessun cliente in rubrica'
+                        : 'Nessun cliente trovato per la ricerca',
+                    style: const TextStyle(
                       fontSize: 16,
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -3931,11 +4116,14 @@ class _CatalogTabState extends State<CatalogTab> {
 
   @override
   Widget build(BuildContext context) {
+    final q = _searchQuery.trim().toLowerCase();
     final filtered = widget.catalog.where((item) {
-      final q = _searchQuery.toLowerCase();
+      if (q.isEmpty) return true;
       return item.name.toLowerCase().contains(q) ||
           item.description.toLowerCase().contains(q) ||
-          item.unitOfMeasure.toLowerCase().contains(q);
+          item.unitOfMeasure.toLowerCase().contains(q) ||
+          item.currency.toLowerCase().contains(q) ||
+          item.discount.toLowerCase().contains(q);
     }).toList();
 
     return Scaffold(
@@ -3967,19 +4155,21 @@ class _CatalogTabState extends State<CatalogTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.inventory_2_outlined,
                     size: 64,
                     color: AppColors.outline,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Nessun articolo a listino',
-                    style: TextStyle(
+                    widget.catalog.isEmpty
+                        ? 'Nessun articolo a listino'
+                        : 'Nessun articolo trovato per la ricerca',
+                    style: const TextStyle(
                       fontSize: 16,
                       color: AppColors.onSurfaceVariant,
                     ),
