@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -360,6 +361,38 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('le label "Catalogo" e "Personalizzata" non sono troncate', (
+      WidgetTester tester,
+    ) async {
+      _setViewport(tester, const Size(320, 640));
+      await _pumpApp(tester);
+      await tester.tap(find.byKey(const Key('documents-banner-cta')));
+      await tester.pumpAndSettle();
+
+      // I due pulsanti stanno in un `Wrap`: restano alla loro larghezza
+      // naturale e vanno in riga successiva. Un `Row` con `Flexible`
+      // eliminerebbe l'overflow ma schiaccerebbe le label (30 px a 320 dp
+      // contro i 112 px e 197 px naturali).
+      const naturalWidths = <String, double>{
+        'Catalogo': 112.8,
+        'Personalizzata': 197.4,
+      };
+      for (final entry in naturalWidths.entries) {
+        final label = find.text(entry.key);
+        expect(label, findsOneWidget);
+        expect(
+          tester.getSize(label).width,
+          closeTo(entry.value, 1),
+          reason: 'la label "${entry.key}" risulta compressa',
+        );
+        expect(
+          tester.firstRenderObject<RenderParagraph>(label).didExceedMaxLines,
+          isFalse,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('"Salva Preventivo" è a larghezza piena e delle altezza standard', (
       WidgetTester tester,
     ) async {
@@ -460,7 +493,10 @@ void main() {
       _setViewport(tester, const Size(400, 900));
       await _pumpApp(tester);
 
-      // Il CTA del banner non usa più `MaterialTapTargetSize.shrinkWrap`.
+      // Il CTA del banner non usa più `MaterialTapTargetSize.shrinkWrap` né
+      // azzera la `minimumSize`: lo stile per-corso sovrascrive solo i colori
+      // (l'inversione bianco/ocra sul gradiente), la geometria arriva dal
+      // tema.
       final banner = tester.widget<ElevatedButton>(
         find.byKey(const Key('documents-banner-cta')),
       );
@@ -469,17 +505,55 @@ void main() {
       expect(banner.style?.minimumSize?.resolve(<WidgetState>{}),
           isNot(Size.zero));
 
-      // Nessun pulsante della schermata ricade su shrinkWrap.
-      final shrinkWraps = tester
-          .widgetList<ButtonStyleButton>(find.byType(ButtonStyleButton))
-          .where((b) => b.style?.tapTargetSize == MaterialTapTargetSize.shrinkWrap);
-      for (final button in shrinkWraps) {
+      // `find.byType` confronta il `runtimeType` esatto e `ButtonStyleButton`
+      // è una classe astratta: per elencare i pulsanti serve un predicato su
+      // `is`, altrimenti il ciclo seguirebbe una lista vuota e il difetto
+      // resterebbe invisibile (asserzione vacua).
+      final buttons = tester
+          .widgetList<ButtonStyleButton>(
+            find.byWidgetPredicate((w) => w is ButtonStyleButton),
+          )
+          .toList();
+      expect(buttons, isNotEmpty, reason: 'la schermata deve avere pulsanti');
+
+      final shrinkWraps = buttons
+          .where(
+            (b) => b.style?.tapTargetSize == MaterialTapTargetSize.shrinkWrap,
+          )
+          .toList();
+      expect(
+        shrinkWraps,
+        isEmpty,
+        reason: 'nessun pulsante deve ridurre la propria area di tap, trovati: '
+            '${shrinkWraps.map((b) => b.runtimeType).toList()}',
+      );
+
+      // Nessuno stile per-corpo azzera l'altezza minima (era ciò che
+      // schiacciava a ~34 px il bottone della barra di sync).
+      for (final button in buttons) {
+        final resolved = _minHeightOf(button.style);
         expect(
-          button.style?.tapTargetSize,
-          isNot(MaterialTapTargetSize.shrinkWrap),
-          reason: '${button.runtimeType} riduce la propria area di tap',
+          resolved.isNaN || resolved > 0,
+          isTrue,
+          reason: '${button.runtimeType} ha una altezza minima azzerata',
         );
       }
+    });
+
+    testWidgets('il bottone "Aggiorna" della barra di sync ha lo standard', (
+      WidgetTester tester,
+    ) async {
+      _setViewport(tester, const Size(320, 640));
+      await _pumpApp(tester);
+
+      final refresh = find.byKey(const Key('documents-sync-refresh'));
+      expect(refresh, findsOneWidget);
+
+      // Era un `TextButton` con `minimumSize: Size.zero` +
+      // `MaterialTapTargetSize.shrinkWrap`: altezza e area di tap diverse da
+      // ogni altro pulsante dell'app.
+      expect(tester.getSize(refresh).height, equals(kRenderedButtonHeight));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('i pulsanti del banner hanno la stessa altezza dello standard', (

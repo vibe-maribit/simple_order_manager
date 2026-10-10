@@ -46,6 +46,12 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
     `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap`, quindi ha la
     stessa area di tap e la stessa altezza di tutti gli altri pulsanti
     (conserva la `Key('documents-banner-cta')`).
+  - **`lib/main.dart`**: il bottone "Aggiorna" della barra di sync non usa più
+    `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap` (era l'ultimo
+    pulsante dell'app con area di tap ridotta, 12 px di altezza contro i 48 px
+    degli altri). La barra ha perso il padding verticale, che serviva solo a
+    compensare l'altezza ridotta: la lista documenti non viene più schiacciata
+    fuori dal viewport su schermi 800×600.
   - **`lib/main.dart`**: le righe dei totali in `OrderEditScreen`
     ("Subtotale Imponibile", "Totale Imposte/IVA", "TOTALE COMPLESSIVO") non
     vanno più in overflow su schermi stretti (le label da sole superavano i
@@ -57,14 +63,15 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
     `Key('settings-brand-logo-remove')`).
 
 - Test:
-  - **`test/button_graphics_test.dart`** (nuovo, 13 test): raggio/altezza/padding
+  - **`test/button_graphics_test.dart`** (nuovo, 15 test): raggio/altezza/padding
     identici fra "Chiudi" e "Condividi" in `DocumentPdfPreviewScreen`, label
     centrate nei rispettivi bottoni, `filledButtonTheme` identico a
     `elevatedButtonTheme`, raggio condiviso fra tutte le famiglie, FAB basato su
-    `AppRadii`, `OrderEditScreen` senza overflow a 320×640 e 360×640, "Salva
-    Preventivo" a larghezza piena, "Elimina" con lo stesso `backgroundColor`/
-    `foregroundColor` e senza `TextStyle` hardcoded, nessun pulsante con
-    `tapTargetSize` shrinkWrap.
+    `AppRadii`, `OrderEditScreen` senza overflow a 320×640 e 360×640, label
+    "Catalogo"/"Personalizzata" non compresse, "Salva Preventivo" a larghezza
+    piena, "Elimina" con lo stesso `backgroundColor`/`foregroundColor` e senza
+    `TextStyle` hardcoded, nessun pulsante con `tapTargetSize` shrinkWrap e
+    bottone "Aggiorna" della barra di sync all'altezza standard.
   - **`test/design_tokens_test.dart`**: asserzioni sui nuovi token `AppButtons` e
     sulla geometria di `elevatedButtonTheme` / `filledButtonTheme` /
     `outlinedButtonTheme` / `textButtonTheme` / `floatingActionButtonTheme`

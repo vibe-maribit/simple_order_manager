@@ -1542,10 +1542,12 @@ class _OrdersTabState extends State<OrdersTab> {
     return Container(
       width: double.infinity,
       color: AppColors.surfaceContainerHigh,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.margin,
-        vertical: AppSpacing.spaceSm,
-      ),
+      // Nessun padding verticale: è il bottone "Aggiorna", ora all'altezza
+      // standard di ogni altro pulsante (48 px con area di tap piena), a
+      // dettare l'altezza della barra. Con il vecchio `shrinkWrap` il padding
+      // serviva a compensare un bottone di 12 px e aggiungeva 36 px di
+      // altezza spingendo fuori dal viewport la lista documenti.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.margin),
       child: Row(
         children: [
           Flexible(
@@ -1595,20 +1597,12 @@ class _OrdersTabState extends State<OrdersTab> {
               ),
             ),
           ),
+          // Nessuno `style:` a per-corpo: il bottone prende raggio, altezza,
+          // padding e area di tap da `textButtonTheme`, come tutti gli altri.
           TextButton(
             key: kSyncRefreshKey,
             onPressed: _syncNow,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.spaceSm,
-              ),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Aggiorna',
-              style: AppTextStyles.labelMd,
-            ),
+            child: const Text('Aggiorna'),
           ),
         ],
       ),
@@ -2225,7 +2219,7 @@ class _OrdersTabState extends State<OrdersTab> {
         borderRadius: BorderRadius.circular(AppRadii.xl),
         onTap: onPressed,
         child: Container(
-          height: 40,
+          height: AppButtons.minHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceSm),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.xl),
