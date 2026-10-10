@@ -4,6 +4,11 @@
          (pulsante microfono in OrderEditScreen). Nessun permesso di storage:
          la registrazione finisce nella cartella cache dell'app. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Connettività di rete: senza questo permesso l'APK release non risolve
+         alcun host (errore "Failed host lookup"), bloccando l'inserimento
+         vocale (Gemini/STT) e l'invio dei documenti via SMTP. Nei build
+         debug/profile Flutter lo inietta da sé, ma in release è assente. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Simple Order Manager"
         android:name="${applicationName}"

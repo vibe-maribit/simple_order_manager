@@ -541,6 +541,28 @@ class DocumentPdfService {
           ? quantity.round().toString()
           : formatEuroNumber(quantity);
 
+  /// Quantità con unità di misura del catalogo accodata: `2` + `NR` -> `2 NR`.
+  ///
+  /// Colonna e calcoli non cambiano: l'UM è solo informativa, come nelle card
+  /// della UI. Senza UM la cella resta identica alle versioni precedenti.
+  static String _quantityWithUm(OrderItem item) {
+    final qty = _quantity(item.quantity);
+    final um = item.unitOfMeasure.trim();
+    return um.isEmpty ? qty : '$qty $um';
+  }
+
+  /// Descrizione colonna con i dettagli catalogo (descrizione e sconto).
+  ///
+  /// Lo sconto del listino (colonna E, es. `35,00  10,00`) viene riportato in
+  /// coda come informazione: non incide su imponibile, IVA o totale.
+  static String _withCatalogDetails(OrderItem item) {
+    final base = item.description.trim().isNotEmpty
+        ? '${item.name} — ${item.description.trim()}'
+        : item.name;
+    final discount = item.discount.trim();
+    return discount.isEmpty ? base : '$base — Sconto: $discount';
+  }
+
   static pw.Widget _itemsTable(WorkOrder order) {
     if (order.items.isEmpty) {
       return pw.Container(
@@ -563,10 +585,8 @@ class DocumentPdfService {
     final data = <List<dynamic>>[
       for (final item in order.items)
         <dynamic>[
-          item.description.trim().isNotEmpty
-              ? '${item.name} — ${item.description.trim()}'
-              : item.name,
-          _quantity(item.quantity),
+          _withCatalogDetails(item),
+          _quantityWithUm(item),
           formatEuro(item.unitPrice),
           '${item.taxRate.toStringAsFixed(0)}%',
           formatEuro(item.subtotal),

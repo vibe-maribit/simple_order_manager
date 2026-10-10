@@ -69,11 +69,38 @@ class StorageService {
     await prefs.setString(_keyClients, jsonStr);
   }
 
+  /// Percorso del catalogo incluso nell'app: listino della issue #25, usato al
+  /// primo avvio quando `SharedPreferences` è ancora vuoto.
+  static const String _assetCatalog = 'assets/catalog/catalogo.json';
+
   static Future<List<CatalogItem>> loadCatalog() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_keyCatalog);
-    if (raw == null || raw.isEmpty) return _seedCatalog();
+    if (raw == null || raw.isEmpty) return _loadCatalogFromAsset();
     try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return _seedCatalog();
+    }
+  }
+
+  /// Carica il listino incluso nell'app (12.351 articoli del file allegato a
+  /// #25). Se l'asset manca o è corrotto ripiega sui 3 articoli di esempio.
+  ///
+  /// Sotto `flutter test` l'asset non è raggiungibile dalla UI senza
+  /// [WidgetTester.runAsync] (il canale `flutter/assets` non risponde nel
+  /// fake-async dei widget test): qui si torna ai seed deterministici, mentre
+  /// i test di import (test/catalog_import_test.dart) validano il file reale
+  /// e la UI viene coperta seminando lo storage con dati reali.
+  static Future<List<CatalogItem>> _loadCatalogFromAsset() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return _seedCatalog();
+    }
+    try {
+      final raw = await rootBundle.loadString(_assetCatalog);
       final list = jsonDecode(raw) as List<dynamic>;
       return list
           .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
@@ -210,21 +237,21 @@ class StorageService {
 
   static List<CatalogItem> _seedCatalog() {
     return [
-      CatalogItem(
+      const CatalogItem(
         id: 'p1',
         name: 'Consulenza Tecnica Specialistica',
         description: 'Tariffa oraria per analisi e preventivazione on-site.',
         unitPrice: 65.0,
         taxRate: 22.0,
       ),
-      CatalogItem(
+      const CatalogItem(
         id: 'p2',
         name: 'Sostituzione Scheda di Controllo',
         description: 'Fornitura ricambio originale e montaggio.',
         unitPrice: 180.0,
         taxRate: 22.0,
       ),
-      CatalogItem(
+      const CatalogItem(
         id: 'p3',
         name: 'Kit Manutenzione Programmata',
         description: 'Verifica serraggi, lubrificazione e test funzionali.',
@@ -2665,6 +2692,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               catalogItemId: i.catalogItemId,
               name: i.name,
               description: i.description,
+              unitOfMeasure: i.unitOfMeasure,
+              discount: i.discount,
               unitPrice: i.unitPrice,
               taxRate: i.taxRate,
               quantity: i.quantity,
@@ -2712,6 +2741,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           catalogItemId: cat.id,
           name: cat.name,
           description: cat.description,
+          unitOfMeasure: cat.unitOfMeasure,
+          discount: cat.discount,
           unitPrice: cat.unitPrice,
           taxRate: cat.taxRate,
           quantity: 1.0,
@@ -2990,6 +3021,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             catalogItemId: catalogMatch?.id ?? '',
             name: catalogMatch?.name ?? name,
             description: catalogMatch?.description ?? '',
+            unitOfMeasure: catalogMatch?.unitOfMeasure ?? '',
+            discount: catalogMatch?.discount ?? '',
             unitPrice: catalogMatch?.unitPrice ?? 0.0,
             taxRate: catalogMatch?.taxRate ?? 22.0,
             quantity: line.quantity,
@@ -3302,6 +3335,22 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (item.unitOfMeasure.isNotEmpty ||
+                                item.discount.isNotEmpty)
+                              Text(
+                                [
+                                  if (item.unitOfMeasure.isNotEmpty)
+                                    'UM ${item.unitOfMeasure}',
+                                  if (item.discount.isNotEmpty)
+                                    'Sconto ${item.discount}',
+                                ].join(' · '),
+                                style: AppTextStyles.bodySm.copyWith(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
                       ),
@@ -3446,8 +3495,13 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%) - ${cat.description}',
-              maxLines: 1,
+              [
+                '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
+                if (cat.unitOfMeasure.isNotEmpty) 'UM ${cat.unitOfMeasure}',
+                if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
+                if (cat.description.isNotEmpty) cat.description,
+              ].join(' · '),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             trailing: ElevatedButton(
@@ -3872,6 +3926,7 @@ class CatalogTab extends StatefulWidget {
 }
 
 class _CatalogTabState extends State<CatalogTab> {
+  static const Key kSearchFieldKey = Key('catalog-search-field');
   String _searchQuery = '';
 
   @override
@@ -3879,7 +3934,8 @@ class _CatalogTabState extends State<CatalogTab> {
     final filtered = widget.catalog.where((item) {
       final q = _searchQuery.toLowerCase();
       return item.name.toLowerCase().contains(q) ||
-          item.description.toLowerCase().contains(q);
+          item.description.toLowerCase().contains(q) ||
+          item.unitOfMeasure.toLowerCase().contains(q);
     }).toList();
 
     return Scaffold(
@@ -3896,6 +3952,7 @@ class _CatalogTabState extends State<CatalogTab> {
               vertical: AppSpacing.spaceSm,
             ),
             child: AppSearchField(
+              key: _CatalogTabState.kSearchFieldKey,
               hintText: 'Cerca prodotto o servizio...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
@@ -3993,6 +4050,29 @@ class _CatalogTabState extends State<CatalogTab> {
                                 ),
                               ),
                             ),
+                            if (item.unitOfMeasure.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadii.lg,
+                                  ),
+                                ),
+                                child: Text(
+                                  'UM ${item.unitOfMeasure}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.secondary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: 8),
                             Text(
                               'Tot. c/IVA: ${formatEuro(grossPrice)}',
@@ -4003,6 +4083,20 @@ class _CatalogTabState extends State<CatalogTab> {
                             ),
                           ],
                         ),
+                        if (item.discount.isNotEmpty ||
+                            item.currencySymbol != '€') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.discount.isNotEmpty
+                                ? 'Sconto: ${item.discount} · '
+                                    'Divisa: ${item.currencySymbol}'
+                                : 'Divisa: ${item.currencySymbol}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     trailing: Column(
@@ -4050,6 +4144,12 @@ class _CatalogTabState extends State<CatalogTab> {
   void _openItemEditor(CatalogItem? existing) {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final descCtrl = TextEditingController(text: existing?.description ?? '');
+    final umCtrl =
+        TextEditingController(text: existing?.unitOfMeasure ?? '');
+    final currencyCtrl =
+        TextEditingController(text: existing?.currency ?? 'E');
+    final discountCtrl =
+        TextEditingController(text: existing?.discount ?? '');
     final priceCtrl = TextEditingController(
       text: existing != null ? existing.unitPrice.toStringAsFixed(2) : '',
     );
@@ -4076,6 +4176,36 @@ class _CatalogTabState extends State<CatalogTab> {
                   controller: descCtrl,
                   decoration: const InputDecoration(labelText: 'Descrizione'),
                   maxLines: 2,
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: umCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Unità di misura',
+                          hintText: 'NR',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: currencyCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Divisa',
+                          hintText: 'E',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                TextField(
+                  controller: discountCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Sconti',
+                    hintText: '35,00',
+                  ),
                 ),
                 TextField(
                   controller: priceCtrl,
@@ -4132,6 +4262,11 @@ class _CatalogTabState extends State<CatalogTab> {
                       DateTime.now().millisecondsSinceEpoch.toString(),
                   name: name,
                   description: descCtrl.text.trim(),
+                  unitOfMeasure: umCtrl.text.trim(),
+                  currency: currencyCtrl.text.trim().isEmpty
+                      ? 'E'
+                      : currencyCtrl.text.trim(),
+                  discount: discountCtrl.text.trim(),
                   unitPrice: price,
                   taxRate: taxRate,
                 );
