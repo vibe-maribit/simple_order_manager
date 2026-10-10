@@ -132,8 +132,7 @@ class CatalogItem {
             ? json['unitOfMeasure'] as String
             : '',
         currency: json['currency'] is String ? json['currency'] as String : 'E',
-        discount:
-            json['discount'] is String ? json['discount'] as String : '',
+        discount: json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
       );
@@ -218,8 +217,7 @@ class OrderItem {
         unitOfMeasure: json['unitOfMeasure'] is String
             ? json['unitOfMeasure'] as String
             : '',
-        discount:
-            json['discount'] is String ? json['discount'] as String : '',
+        discount: json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
         quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,

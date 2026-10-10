@@ -10,6 +10,14 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ## [1.8.2] - 2026-10-10
 
+### Changed
+
+- **Formattazione canonica dell'intero tree** (`dart format lib test`): 17 file
+  non erano allineati a `dart format` (righe spezzate che rientrano nei 80
+  caratteri, newline finali mancanti). Il fix è puramente meccanico e non
+  cambia comportamento: `dart format --output=none --set-exit-if-changed lib test`
+  ora esce pulito.
+
 ### Fixed
 
 - **Chip filtro "schiacciati" nella tab Documenti**: le etichette "Tutti",

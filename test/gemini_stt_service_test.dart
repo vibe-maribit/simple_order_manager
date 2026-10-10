@@ -61,7 +61,8 @@ void main() {
         'https://generativelanguage.googleapis.com/v1beta',
       );
       expect(
-        const AiConfig(apiBaseUrl: 'https://googleapis.com/').resolvedApiBaseUrl,
+        const AiConfig(apiBaseUrl: 'https://googleapis.com/')
+            .resolvedApiBaseUrl,
         'https://generativelanguage.googleapis.com/v1beta',
       );
       expect(
@@ -124,7 +125,9 @@ void main() {
       _model('imagen-4.0-generate', methods: const <String>['generateImages']),
     ];
 
-    test('chat tiene i multimodali audio escludendo transcribe e non generativi', () {
+    test(
+        'chat tiene i multimodali audio escludendo transcribe e non generativi',
+        () {
       final chat = GeminiSttService.filterChatModels(models);
       expect(chat.map((m) => m.id), <String>['gemini-2.5-flash']);
     });
@@ -259,7 +262,8 @@ void main() {
       );
     });
 
-    test('righe senza nome vengono scartate e JSON non-oggetto è un errore', () {
+    test('righe senza nome vengono scartate e JSON non-oggetto è un errore',
+        () {
       final draft = VoiceOrderDraft.parse(
         '{"items":[{"product_name":"","quantity":2}]}',
       );

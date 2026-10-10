@@ -11,8 +11,9 @@ Uint8List _png(int width, int height) =>
     img.encodePng(img.Image(width: width, height: height));
 
 /// SVG minimale, riconosciuto da [BrandLogoStore.isSvg].
-Uint8List _svg([String body = '<svg xmlns="http://www.w3.org/2000/svg" '
-    'viewBox="0 0 10 10"><rect width="10" height="10"/></svg>']) =>
+Uint8List _svg(
+        [String body = '<svg xmlns="http://www.w3.org/2000/svg" '
+            'viewBox="0 0 10 10"><rect width="10" height="10"/></svg>']) =>
     Uint8List.fromList(body.codeUnits);
 
 void main() {

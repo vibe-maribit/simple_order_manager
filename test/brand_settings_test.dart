@@ -392,8 +392,8 @@ void main() {
       return tester.getSize(logo);
     }
 
-    testWidgets('area 2:1: 240x120 completa, 180x90 dense (era 168x84 / 132x66)',
-        (
+    testWidgets(
+        'area 2:1: 240x120 completa, 180x90 dense (era 168x84 / 132x66)', (
       WidgetTester tester,
     ) async {
       // Logo 2:1 (480×240): riempie esattamente l'area riservata, quindi ne
@@ -858,7 +858,8 @@ void main() {
       final snackbar = find.byKey(const Key('settings-brand-logo-lowres'));
       expect(snackbar, findsOneWidget);
       expect(
-        find.descendant(of: snackbar, matching: find.textContaining('40×40 px')),
+        find.descendant(
+            of: snackbar, matching: find.textContaining('40×40 px')),
         findsOneWidget,
       );
       expect(
@@ -869,7 +870,8 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: snackbar, matching: find.textContaining('25×15 mm')),
+        find.descendant(
+            of: snackbar, matching: find.textContaining('25×15 mm')),
         findsOneWidget,
       );
 

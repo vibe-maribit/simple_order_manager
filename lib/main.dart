@@ -2971,11 +2971,11 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     try {
       final draft = await GeminiSttService.instance
           .extractOrderFromAudioWithModelFallback(
-            context: context,
-            config: _aiConfig,
-            onConfigSaved: _saveAiConfig,
-            audioFile: audioFile,
-          );
+        context: context,
+        config: _aiConfig,
+        onConfigSaved: _saveAiConfig,
+        audioFile: audioFile,
+      );
       if (!mounted) return;
       _applyVoiceDraft(draft);
     } on GeminiSttException catch (error) {
@@ -2983,7 +2983,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       _showVoiceMessage(error.message, error: true);
     } on Object {
       if (!mounted) return;
-      _showVoiceMessage('Elaborazione audio non riuscita: riprova.', error: true);
+      _showVoiceMessage('Elaborazione audio non riuscita: riprova.',
+          error: true);
     } finally {
       try {
         if (await audioFile.exists()) {
@@ -3128,8 +3129,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
         backgroundColor: error
             ? AppColors.error
             : warning
-            ? AppColors.tertiaryFixed
-            : null,
+                ? AppColors.tertiaryFixed
+                : null,
         content: Text(
           message,
           style: error || !warning
@@ -3533,8 +3534,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   child: AppSearchField(
                     key: const Key('catalog-picker-search-field'),
                     hintText: 'Cerca articolo...',
-                    onChanged: (value) =>
-                        setModalState(() => query = value),
+                    onChanged: (value) => setModalState(() => query = value),
                   ),
                 ),
                 Expanded(
@@ -3542,7 +3542,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(16),
-                            child: Text('Nessun articolo trovato per la ricerca'),
+                            child:
+                                Text('Nessun articolo trovato per la ricerca'),
                           ),
                         )
                       : ListView.builder(
@@ -3553,14 +3554,18 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                             return ListTile(
                               title: Text(
                                 cat.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
                               ),
                               subtitle: Text(
                                 [
                                   '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
-                                  if (cat.unitOfMeasure.isNotEmpty) 'UM ${cat.unitOfMeasure}',
-                                  if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
-                                  if (cat.description.isNotEmpty) cat.description,
+                                  if (cat.unitOfMeasure.isNotEmpty)
+                                    'UM ${cat.unitOfMeasure}',
+                                  if (cat.discount.isNotEmpty)
+                                    'Sconto ${cat.discount}',
+                                  if (cat.description.isNotEmpty)
+                                    cat.description,
                                 ].join(' · '),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -3616,8 +3621,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   child: AppSearchField(
                     key: const Key('client-picker-search-field'),
                     hintText: 'Cerca cliente per nome, telefono, email...',
-                    onChanged: (value) =>
-                        setModalState(() => query = value),
+                    onChanged: (value) => setModalState(() => query = value),
                   ),
                 ),
                 Expanded(
@@ -3625,7 +3629,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(16),
-                            child: Text('Nessun cliente trovato per la ricerca'),
+                            child:
+                                Text('Nessun cliente trovato per la ricerca'),
                           ),
                         )
                       : ListView.builder(
@@ -3653,7 +3658,8 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: selected
-                                  ? const Icon(Icons.check, color: AppColors.primary)
+                                  ? const Icon(Icons.check,
+                                      color: AppColors.primary)
                                   : null,
                               onTap: () {
                                 setState(() {
@@ -4358,12 +4364,9 @@ class _CatalogTabState extends State<CatalogTab> {
   void _openItemEditor(CatalogItem? existing) {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final descCtrl = TextEditingController(text: existing?.description ?? '');
-    final umCtrl =
-        TextEditingController(text: existing?.unitOfMeasure ?? '');
-    final currencyCtrl =
-        TextEditingController(text: existing?.currency ?? 'E');
-    final discountCtrl =
-        TextEditingController(text: existing?.discount ?? '');
+    final umCtrl = TextEditingController(text: existing?.unitOfMeasure ?? '');
+    final currencyCtrl = TextEditingController(text: existing?.currency ?? 'E');
+    final discountCtrl = TextEditingController(text: existing?.discount ?? '');
     final priceCtrl = TextEditingController(
       text: existing != null ? existing.unitPrice.toStringAsFixed(2) : '',
     );

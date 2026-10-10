@@ -48,8 +48,8 @@ String _pdfText(Uint8List bytes) => String.fromCharCodes(bytes);
 /// Content stream della pagina: il primo `stream … endstream` del file è la
 /// pagina, gli stream successivi sono le risorse (immagini/font).
 String _pageContent(Uint8List bytes) {
-  final match =
-      RegExp(r'stream\r?\n([\s\S]*?)\r?\nendstream').firstMatch(_pdfText(bytes));
+  final match = RegExp(r'stream\r?\n([\s\S]*?)\r?\nendstream')
+      .firstMatch(_pdfText(bytes));
   return match?.group(1) ?? '';
 }
 
@@ -209,8 +209,8 @@ void main() {
       final corruptPath = await store.save(_png(8, 8));
       await File(corruptPath).writeAsBytes(<int>[1, 2, 3, 4, 5]);
 
-      final corrupt = await BrandCardPdfService()
-          .buildBytes(_brand(logoPath: corruptPath));
+      final corrupt =
+          await BrandCardPdfService().buildBytes(_brand(logoPath: corruptPath));
       expect(_pageContent(corrupt), isNot(contains(' Do Q')));
       expect(_pageContent(corrupt), contains(_fallbackStroke),
           reason: 'bordo del box di fallback disegnato');
@@ -288,8 +288,7 @@ void main() {
         if (dir.existsSync()) dir.deleteSync(recursive: true);
       });
 
-      final service =
-          BrandCardPdfService(directoryResolver: () async => dir);
+      final service = BrandCardPdfService(directoryResolver: () async => dir);
       final path = await saveLogo(_png(600, 300));
       final result = await service.export(_brand(logoPath: path));
 
