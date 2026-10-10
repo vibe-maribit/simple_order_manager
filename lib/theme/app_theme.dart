@@ -285,6 +285,67 @@ abstract final class AppTextStyles {
 }
 
 // ==========================================
+// COMPONENT TOKENS (BOTTONI)
+// ==========================================
+
+/// Geometria condivisa da tutte le famiglie di pulsanti.
+///
+/// Prima di questa classe ogni schermata ridefiniva raggio, altezza e padding
+/// con valori hardcoded: il risultato era una barra di pulsanti affiancati con
+/// raggi e altezze diverse (il caso peggiore era `FilledButton.icon` con il
+/// `StadiumBorder` di Material 3 accanto a un `OutlinedButton` con
+/// [AppRadii.xl]). Qui la geometria è definita una sola volta e consumata da
+/// `elevatedButtonTheme`, `filledButtonTheme`, `outlinedButtonTheme`,
+/// `textButtonTheme` e `floatingActionButtonTheme`.
+abstract final class AppButtons {
+  /// 40 — altezza minima di tutti i pulsanti (era 36 di default M3 sui
+  /// filled/elevated e 40 sui text/outlined: due altezze diverse).
+  static const double minHeight = 40;
+
+  /// 8 — raggio degli angoli, coerente con card, banner e input.
+  static const double radius = AppRadii.xl;
+
+  /// 16/8 — padding orizzontale/verticale: abbastanza respiro per l'icona da
+  /// 24 px senza l'altezza extra dei 40 px di default M3 sui pulsanti con
+  /// icona (che spingevano l'altezza a ~48 px).
+  static const EdgeInsets padding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.spaceMd,
+    vertical: AppSpacing.spaceSm,
+  );
+
+  /// 14 w600 — label interattiva: identica per tutte le famiglie.
+  static const TextStyle textStyle = AppTextStyles.labelLg;
+
+  /// Bordo condiviso: nessun override per-corpo può più cambiare il raggio
+  /// senza passare da un token.
+  static const RoundedRectangleBorder shape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
+  );
+
+  /// [minimumSize] derivato da [minHeight]: larghezza illimitata così i
+  /// pulsanti restano shrink-wrap nel loro contenitore.
+  static const Size minimumSize = Size(0, minHeight);
+
+  /// Stile distruttivo **filled**: unico aspetto per l'azione "Elimina"
+  /// (foglio di dettaglio e dialog di conferma di preventivi, clienti e
+  /// articoli). Prima la stessa azione aveva due grafiche diverse
+  /// (`errorContainer`/`onErrorContainer` nel foglio, `error` nei dialog).
+  static const ButtonStyle destructiveStyle = ButtonStyle(
+    backgroundColor: WidgetStatePropertyAll(AppColors.error),
+    foregroundColor: WidgetStatePropertyAll(AppColors.onPrimary),
+    elevation: WidgetStatePropertyAll(0),
+  );
+
+  /// Stile distruttivo **outlined**: stesso `error` su label, icona e bordo,
+  /// così le azioni distruttive secondarie ("Rimuovi logo", "Rimuovi" SMTP)
+  /// non hanno il bordo neutro del tema.
+  static const ButtonStyle destructiveOutlinedStyle = ButtonStyle(
+    foregroundColor: WidgetStatePropertyAll(AppColors.error),
+    side: WidgetStatePropertyAll(BorderSide(color: AppColors.error)),
+  );
+}
+
+// ==========================================
 // THEME
 // ==========================================
 
@@ -390,35 +451,56 @@ abstract final class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           elevation: 0,
-          textStyle: AppTextStyles.labelLg,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadii.xl),
-          ),
+          textStyle: AppButtons.textStyle,
+          padding: AppButtons.padding,
+          minimumSize: AppButtons.minimumSize,
+          shape: AppButtons.shape,
+        ),
+      ),
+      // Famiglia `filled` assente fino alla 1.8.1: i `FilledButton.icon` di
+      // `DocumentPdfPreviewScreen` restavano sui default Material 3
+      // (`StadiumBorder` a pillola) ed erano disuniformi dai `OutlinedButton`
+      // affiancati nella stessa barra.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          elevation: 0,
+          textStyle: AppButtons.textStyle,
+          padding: AppButtons.padding,
+          minimumSize: AppButtons.minimumSize,
+          shape: AppButtons.shape,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: AppTextStyles.labelLg,
+          textStyle: AppButtons.textStyle,
+          padding: AppButtons.padding,
+          minimumSize: AppButtons.minimumSize,
           side: BorderSide(color: scheme.outline),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadii.xl),
-          ),
+          shape: AppButtons.shape,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: AppTextStyles.labelLg,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadii.xl),
-          ),
+          textStyle: AppButtons.textStyle,
+          padding: AppButtons.padding,
+          minimumSize: AppButtons.minimumSize,
+          shape: AppButtons.shape,
         ),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
+        // I FAB senza `shape` usano il `CircleBorder`/`RoundedRectangleBorder`
+        // di default M3: il raggio era l'unico elemento della UI non
+        // derivato dai token. Stesso raggio di card, sheet e pill.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.full),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surfaceContainerLowest,
