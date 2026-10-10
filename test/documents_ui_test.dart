@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:simple_order_manager/main.dart';
+import 'package:simple_order_manager/services/gemini_stt_service.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 
 /// Ordini di test con totali noti, per verificare i KPI senza dipendere dal
@@ -1122,6 +1123,198 @@ void main() {
         reason: 'nessun overflow nel bottom sheet a 320x640 con logo reale '
             'e testi lunghi',
       );
+    });
+  });
+
+  group('Ricerca condivisa e inserimento vocale (#order-edit)', () {
+    final List<Client> skinClients = <Client>[
+      Client(id: 'c1', name: 'Mario Rossi Milano'),
+      Client(id: 'c2', name: 'Mario Rossi Torino'),
+      Client(id: 'c3', name: 'Studio Bianchi'),
+    ];
+
+    const List<CatalogItem> uidCatalog = <CatalogItem>[
+      CatalogItem(
+        id: 'p1',
+        name: 'MPM DUROGLASS P6/1 RAL 7035 KG17.5',
+        description: 'Lastra vetroresina',
+        unitOfMeasure: 'NR',
+        unitPrice: 295.85,
+        discount: '10,00',
+        taxRate: 22.0,
+      ),
+      CatalogItem(
+        id: 'p2',
+        name: 'SIGMA PUTZ ENERGY 1.5MM ZN',
+        description: 'Intonaco esterno 1.5 mm',
+        unitOfMeasure: 'NR',
+        unitPrice: 78.0,
+        discount: '35,00',
+        taxRate: 22.0,
+      ),
+    ];
+
+    Future<dynamic> pumpOrderEditor(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: OrderEditScreen(
+            clients: skinClients,
+            catalog: uidCatalog,
+            onSave: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tester.state(find.byType(OrderEditScreen));
+    }
+
+    Future<void> flushSnackBars(WidgetTester tester) async {
+      await tester.pump(const Duration(seconds: 8));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'il picker Catalogo è ricercabile e la voce eredita il '
+        'catalogo', (WidgetTester tester) async {
+      await pumpOrderEditor(tester);
+
+      await tester.tap(find.text('Catalogo'));
+      await tester.pumpAndSettle();
+
+      final searchField = find.byKey(const Key('catalog-picker-search-field'));
+      expect(searchField, findsOneWidget);
+      expect(find.text('Seleziona dal Catalogo'), findsOneWidget);
+      expect(find.text('MPM DUROGLASS P6/1 RAL 7035 KG17.5'), findsOneWidget);
+      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsOneWidget);
+
+      await tester.enterText(searchField, 'duroglass');
+      await tester.pumpAndSettle();
+
+      expect(find.text('MPM DUROGLASS P6/1 RAL 7035 KG17.5'), findsOneWidget);
+      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsNothing);
+
+      await tester.tap(find.text('Seleziona'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MPM DUROGLASS P6/1 RAL 7035 KG17.5'), findsOneWidget);
+      expect(find.text('€ 295,85 + IVA 22%'), findsOneWidget);
+      expect(find.text('UM NR · Sconto 10,00'), findsOneWidget);
+    });
+
+    testWidgets(
+        'la dettatura con match esatto seleziona il cliente e '
+        'inserisce la voce con prezzo/IVA/UM/sconto', (
+      WidgetTester tester,
+    ) async {
+      final state = await pumpOrderEditor(tester);
+
+      const candidate = VoiceOrderDraft(
+        customerName: 'mario rossi milano',
+        lines: [
+          VoiceOrderLine(
+            productName: 'SIGMA PUTZ ENERGY 1.5MM ZN',
+            quantity: 2,
+          ),
+        ],
+      );
+      await (state as dynamic).applyVoiceDraft(candidate);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mario Rossi Milano'), findsOneWidget);
+      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsOneWidget);
+      expect(find.text('€ 78,00 + IVA 22%'), findsOneWidget);
+      expect(find.text('UM NR · Sconto 35,00'), findsOneWidget);
+      await flushSnackBars(tester);
+    });
+
+    testWidgets(
+        'cliente ambiguo apre il foglio precompilato e la scelta lo '
+        'seleziona', (WidgetTester tester) async {
+      final state = await pumpOrderEditor(tester);
+
+      const candidate = VoiceOrderDraft(
+        customerName: 'mario rossi',
+        lines: [],
+      );
+      final drafter = (state as dynamic).applyVoiceDraft(candidate);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Seleziona cliente'), findsOneWidget);
+      expect(find.text('mario rossi'), findsWidgets);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('search-pick-item-0')),
+          matching: find.text('Seleziona'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await drafter;
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mario Rossi Milano'), findsOneWidget);
+      await flushSnackBars(tester);
+    });
+
+    testWidgets(
+        'articolo non risolto apre il foglio e la selezione inserisce '
+        'la voce di catalogo', (WidgetTester tester) async {
+      final state = await pumpOrderEditor(tester);
+
+      const candidate = VoiceOrderDraft(
+        customerName: '',
+        lines: [VoiceOrderLine(productName: 'articolo inesistente')],
+      );
+      final drafter = (state as dynamic).applyVoiceDraft(candidate);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Seleziona articolo'), findsOneWidget);
+      expect(find.text('articolo inesistente'), findsOneWidget);
+
+      final searchField = find.byKey(const Key('order-edit-item-pick-search'));
+      await tester.enterText(searchField, 'SIGMA');
+      await tester.pumpAndSettle();
+      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsOneWidget);
+
+      await tester.tap(find.text('Seleziona'));
+      await tester.pumpAndSettle();
+      await drafter;
+      await tester.pumpAndSettle();
+
+      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsOneWidget);
+      expect(find.text('€ 78,00 + IVA 22%'), findsOneWidget);
+      await flushSnackBars(tester);
+    });
+
+    testWidgets(
+        'articolo non risolto e foglio chiuso resta voce senza prezzo '
+        'con avviso', (WidgetTester tester) async {
+      final state = await pumpOrderEditor(tester);
+
+      const candidate = VoiceOrderDraft(
+        customerName: '',
+        lines: [VoiceOrderLine(productName: 'componente sconosciuto')],
+      );
+      final drafter = (state as dynamic).applyVoiceDraft(candidate);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Seleziona articolo'), findsOneWidget);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      await drafter;
+      await tester.pumpAndSettle();
+
+      expect(find.text('componente sconosciuto'), findsOneWidget);
+      expect(find.text('€ 0,00 + IVA 22%'), findsOneWidget);
+      final message = find.byKey(const Key('order-edit-voice-message'));
+      expect(message, findsOneWidget);
+      final text = tester
+          .widget<Text>(
+              find.descendant(of: message, matching: find.byType(Text)))
+          .data;
+      expect(text, contains('senza prezzo: componente sconosciuto'));
+      await flushSnackBars(tester);
     });
   });
 }

@@ -8,6 +8,37 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.8.0] - 2026-10-10
+
+### Added
+
+- **Inserimento vocale collegato alla ricerca del database**: il pulsante microfono
+  in `OrderEditScreen` ora risolve cliente e voci dettate usando le stesse predicate di
+  ricerca delle tab Clienti e Catalogo, invece del matching isolato precedente.
+  - `lib/utils/entity_search.dart`: modulo condiviso Dart puro (`normalizeSearchText`,
+    `searchClients` su nome/telefono/email, `searchCatalog` su nome/descrizione/UM e
+    `bestClientMatch`/`bestCatalogMatch` con ranking deterministico
+    esatto > prefisso > sottostringa, tie-break su nome più corto e lunghezza token,
+    utile con i 12.351 articoli del listino).
+  - Le tab Clienti (`_ClientsTabState.build`) e Catalogo (`_CatalogTabState.build`)
+    chiamano `searchClients`/`searchCatalog`: unica definizione di "cerca", stessa
+    UI, stesse `Key` e stessi testi.
+  - Il flusso vocale (`_applyVoiceDraft`) usa `bestClientMatch`/`bestCatalogMatch`:
+    a match esatto/parziale il cliente viene selezionato e le voci entrano nel
+    preventivo con `catalogItemId`, prezzo, IVA, UM e sconto ereditati dal catalogo
+    (nuovo factory `OrderItem.fromCatalog` in `lib/models/models.dart`).
+  - Le voci non risolte restano inserite come voce senza prezzo e generano l'avviso
+    `senza prezzo` nel messaggio `order-edit-voice-message`, come prima.
+  - **Foglio di selezione ricercabile** (`_SearchablePickSheet` in `lib/main.dart`)
+    precompilato col testo dettato quando cliente/articolo non è risolto o è ambiguo:
+    la scelta dell'utente completa l'inserimento del preventivo. Anche il picker
+    Catalogo esistente (`_showCatalogPicker`) ora ha il campo di ricerca
+    (`catalog-picker-search-field`).
+  - `AppSearchField` accetta un `controller` opzionale per precompilare la ricerca.
+- Test: `test/entity_search_test.dart` (normalizzazione accenti/case/spazi, ricerca
+  per campo, ranking `best*Match` e ambiguità), estensioni in `test/documents_ui_test.dart`
+  (picker Catalogo ricercabile e inserimento della voce con i dati del catalogo).
+
 ## [1.7.0] - 2026-10-10
 
 ### Fixed

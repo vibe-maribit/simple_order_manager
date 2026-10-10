@@ -132,8 +132,7 @@ class CatalogItem {
             ? json['unitOfMeasure'] as String
             : '',
         currency: json['currency'] is String ? json['currency'] as String : 'E',
-        discount:
-            json['discount'] is String ? json['discount'] as String : '',
+        discount: json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
       );
@@ -196,6 +195,27 @@ class OrderItem {
   double get taxAmount => subtotal * (taxRate / 100);
   double get total => subtotal + taxAmount;
 
+  /// Costruisce la voce a partire da un articolo di catalogo, ereditando
+  /// prezzo, IVA, UM e sconto. Usata dall'inserimento dal catalogo e dal
+  /// flusso vocale per non duplicare la mappatura dei campi.
+  factory OrderItem.fromCatalog(
+    CatalogItem catalog, {
+    required String id,
+    double quantity = 1.0,
+  }) {
+    return OrderItem(
+      id: id,
+      catalogItemId: catalog.id,
+      name: catalog.name,
+      description: catalog.description,
+      unitOfMeasure: catalog.unitOfMeasure,
+      discount: catalog.discount,
+      unitPrice: catalog.unitPrice,
+      taxRate: catalog.taxRate,
+      quantity: quantity,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'catalogItemId': catalogItemId,
@@ -218,8 +238,7 @@ class OrderItem {
         unitOfMeasure: json['unitOfMeasure'] is String
             ? json['unitOfMeasure'] as String
             : '',
-        discount:
-            json['discount'] is String ? json['discount'] as String : '',
+        discount: json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
         quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
