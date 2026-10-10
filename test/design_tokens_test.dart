@@ -152,6 +152,130 @@ void main() {
     });
   });
 
+  group('AppButtons — geometria condivisa dei pulsanti', () {
+    test('i token derivano dagli altri token del design system', () {
+      expect(AppButtons.minHeight, equals(40));
+      expect(AppButtons.radius, equals(AppRadii.xl));
+      expect(AppButtons.textStyle, equals(AppTextStyles.labelLg));
+      expect(
+        AppButtons.padding,
+        equals(
+          const EdgeInsets.symmetric(
+            horizontal: AppSpacing.spaceMd,
+            vertical: AppSpacing.spaceSm,
+          ),
+        ),
+      );
+      expect(AppButtons.shape.borderRadius,
+          equals(const BorderRadius.all(Radius.circular(AppRadii.xl))));
+      expect(AppButtons.minimumSize, equals(const Size(0, AppButtons.minHeight)));
+    });
+
+    test('gli stili distruttivi usano solo token colore', () {
+      expect(
+        AppButtons.destructiveStyle.backgroundColor?.resolve(<WidgetState>{}),
+        equals(AppColors.error),
+      );
+      expect(
+        AppButtons.destructiveStyle.foregroundColor?.resolve(<WidgetState>{}),
+        equals(AppColors.onPrimary),
+      );
+      expect(
+        AppButtons.destructiveOutlinedStyle
+            .foregroundColor?.resolve(<WidgetState>{}),
+        equals(AppColors.error),
+      );
+      expect(
+        AppButtons.destructiveOutlinedStyle.side?.resolve(<WidgetState>{})?.color,
+        equals(AppColors.error),
+      );
+    });
+  });
+
+  group('buildAppTheme() — geometria dei pulsanti', () {
+    BorderRadius radiusOf(ButtonStyle? style) =>
+        (style!.shape!.resolve(<WidgetState>{})! as RoundedRectangleBorder)
+            .borderRadius as BorderRadius;
+
+    double minHeightOf(ButtonStyle? style) =>
+        style!.minimumSize!.resolve(<WidgetState>{})!.height;
+
+    EdgeInsets paddingOf(ButtonStyle? style) =>
+        style!.padding!.resolve(<WidgetState>{}) as EdgeInsets;
+
+    test('filledButtonTheme esiste ed è identico a elevatedButtonTheme', () {
+      final theme = AppTheme.light;
+
+      expect(theme.filledButtonTheme.style, isNotNull);
+
+      final filled = theme.filledButtonTheme.style!;
+      final elevated = theme.elevatedButtonTheme.style!;
+
+      expect(radiusOf(filled), equals(radiusOf(elevated)));
+      expect(minHeightOf(filled), equals(minHeightOf(elevated)));
+      expect(paddingOf(filled), equals(paddingOf(elevated)));
+      expect(
+        filled.textStyle?.resolve(<WidgetState>{})?.fontSize,
+        equals(elevated.textStyle?.resolve(<WidgetState>{})?.fontSize),
+      );
+      expect(
+        filled.backgroundColor?.resolve(<WidgetState>{}),
+        equals(AppColors.primary),
+      );
+      expect(
+        filled.foregroundColor?.resolve(<WidgetState>{}),
+        equals(AppColors.onPrimary),
+      );
+    });
+
+    test('elevated/filled/outlined/text condividono raggio, altezza e label', () {
+      final theme = AppTheme.light;
+      final families = <String, ButtonStyle?>{
+        'elevated': theme.elevatedButtonTheme.style,
+        'filled': theme.filledButtonTheme.style,
+        'outlined': theme.outlinedButtonTheme.style,
+        'text': theme.textButtonTheme.style,
+      };
+
+      families.forEach((name, style) {
+        expect(style, isNotNull, reason: '$name senza stile');
+        expect(
+          radiusOf(style),
+          equals(BorderRadius.circular(AppRadii.xl)),
+          reason: '$name: raggio fuori dal design system',
+        );
+        expect(
+          minHeightOf(style),
+          equals(AppButtons.minHeight),
+          reason: '$name: altezza minima fuori dal design system',
+        );
+        expect(paddingOf(style), equals(AppButtons.padding));
+        expect(
+          style!.textStyle?.resolve(<WidgetState>{})?.fontSize,
+          equals(AppTextStyles.labelLg.fontSize),
+          reason: '$name: label fuori dal design system',
+        );
+      });
+    });
+
+    test('i filled/elevated sono senza elevazione', () {
+      final theme = AppTheme.light;
+
+      expect(theme.elevatedButtonTheme.style?.elevation?.resolve(<WidgetState>{}),
+          equals(0));
+      expect(theme.filledButtonTheme.style?.elevation?.resolve(<WidgetState>{}),
+          equals(0));
+    });
+
+    test('il FAB usa un raggio derivato da AppRadii', () {
+      final theme = AppTheme.light;
+      final shape = theme.floatingActionButtonTheme.shape! as RoundedRectangleBorder;
+
+      expect(shape.borderRadius, equals(BorderRadius.circular(AppRadii.full)));
+      expect(theme.floatingActionButtonTheme.elevation, equals(0));
+    });
+  });
+
   group('Theme installato nell\'app', () {
     testWidgets('il tema risolto dal contesto è quello del design system', (
       WidgetTester tester,

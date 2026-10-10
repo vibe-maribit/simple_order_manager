@@ -22,13 +22,13 @@ class AppInfo {
   /// Versione semantica (MAJOR.MINOR.PATCH), es. `1.1.0`.
   static const String version = String.fromEnvironment(
     'APP_VERSION',
-    defaultValue: '1.8.0',
+    defaultValue: '1.8.1',
   );
 
   /// Build number (intero incrementato ad ogni release), es. `2`.
   static const String buildNumber = String.fromEnvironment(
     'APP_BUILD_NUMBER',
-    defaultValue: '10',
+    defaultValue: '11',
   );
 
   /// Versione completa pronta per la UI, es. `1.1.0 (2)`.

@@ -631,9 +631,7 @@ class _SettingsTabState extends State<SettingsTab> {
                         key: const Key('settings-brand-logo-remove'),
                         icon: const Icon(Icons.delete_outline, size: 18),
                         label: const Text('Rimuovi logo'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                        ),
+                        style: AppButtons.destructiveOutlinedStyle,
                         onPressed: _removeLogo,
                       ),
                     ),
@@ -1066,9 +1064,7 @@ class _SettingsTabState extends State<SettingsTab> {
                           key: const Key('settings-smtp-remove'),
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text('Rimuovi'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                          ),
+                          style: AppButtons.destructiveOutlinedStyle,
                           onPressed: _smtpTesting ? null : _removeSmtpConfig,
                         ),
                       ),

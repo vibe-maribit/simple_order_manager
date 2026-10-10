@@ -8,6 +8,75 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.8.1] - 2026-10-10
+
+### Fixed
+
+- **Grafiche dei pulsanti non uniformi** (issue "pulsanti segnati in verde"):
+  ogni schermata ridefiniva a mano raggio, altezza, padding e area di tap, con
+  risultati diversi a ogni schermata.
+  - **`lib/theme/app_theme.dart`**: nuova classe di token `AppButtons` con la
+    geometria condivisa (`minHeight` 40, `radius` `AppRadii.xl`, `padding`
+    `AppSpacing.spaceMd`/`spaceSm`, `textStyle` `AppTextStyles.labelLg`, `shape`
+    `RoundedRectangleBorder`) e gli stili distruttivi `destructiveStyle` /
+    `destructiveOutlinedStyle`. I token sono applicati a `elevatedButtonTheme`,
+    `outlinedButtonTheme`, `textButtonTheme` e `floatingActionButtonTheme`.
+  - **`lib/theme/app_theme.dart`**: aggiunto il **`filledButtonTheme`** mancante.
+    I `FilledButton.icon` di `lib/documents/pdf_preview_screen.dart` restavano
+    sui default Material 3 (`StadiumBorder` a pillola) e risultavano
+    disuniformi dal `OutlinedButton.icon` affiancato nella stessa barra.
+  - **`floatingActionButtonTheme`**: impostato uno `shape` basato su
+    `AppRadii.full`; i due `FloatingActionButton.extended` di `lib/main.dart`
+    (tab Clienti e Catalogo) non usano più il raggio di default Material 3.
+  - **`lib/main.dart`**: i quattro pulsanti distruttivi "Elimina" (foglio di
+    dettaglio ordine e dialog di conferma di ordini, clienti e articoli) hanno
+    ora un unico aspetto — `AppColors.error` su `AppColors.onPrimary` — al posto
+    del precedente `errorContainer`/`onErrorContainer` nel solo foglio di
+    dettaglio; rimosse le `TextStyle(color: AppColors.onPrimary)` hardcoded
+    dalle label.
+  - **`lib/main.dart`**: il CTA "Salva Preventivo" non usa più
+    `padding: EdgeInsets.all(16)` e `fontSize: 16` hardcoded (altezza ~72 px
+    contro i 48 px degli altri pulsanti) ed è ora a larghezza piena come gli
+    altri CTA primary.
+  - **`lib/main.dart`**: la riga "Voci Preventivo" non va più in overflow a
+    320×640 e 360×640 — titolo e pulsanti "Catalogo" / "Personalizzata" erano
+    in una `Row` la cui somma delle larghezze naturali superava lo spazio
+    disponibile; ora il titolo sta sopra e i pulsanti sono in un `Wrap`.
+  - **`lib/main.dart`**: il CTA "Crea" del banner non usa più
+    `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap`, quindi ha la
+    stessa area di tap e la stessa altezza di tutti gli altri pulsanti
+    (conserva la `Key('documents-banner-cta')`).
+  - **`lib/main.dart`**: il bottone "Aggiorna" della barra di sync non usa più
+    `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap` (era l'ultimo
+    pulsante dell'app con area di tap ridotta, 12 px di altezza contro i 48 px
+    degli altri). La barra ha perso il padding verticale, che serviva solo a
+    compensare l'altezza ridotta: la lista documenti non viene più schiacciata
+    fuori dal viewport su schermi 800×600.
+  - **`lib/main.dart`**: le righe dei totali in `OrderEditScreen`
+    ("Subtotale Imponibile", "Totale Imposte/IVA", "TOTALE COMPLESSIVO") non
+    vanno più in overflow su schermi stretti (le label da sole superavano i
+    296 px utili a 320 dp); i loro stili tipografici derivano dalla scala dei
+    token.
+  - **`lib/settings/brand_settings_screen.dart`**: "Rimuovi logo" e "Rimuovi"
+    (SMTP) usano lo stile distruttivo outlined, quindi anche il **bordo** passa
+    al token `error` invece di restare sul grigio neutro del tema (conservata la
+    `Key('settings-brand-logo-remove')`).
+
+- Test:
+  - **`test/button_graphics_test.dart`** (nuovo, 15 test): raggio/altezza/padding
+    identici fra "Chiudi" e "Condividi" in `DocumentPdfPreviewScreen`, label
+    centrate nei rispettivi bottoni, `filledButtonTheme` identico a
+    `elevatedButtonTheme`, raggio condiviso fra tutte le famiglie, FAB basato su
+    `AppRadii`, `OrderEditScreen` senza overflow a 320×640 e 360×640, label
+    "Catalogo"/"Personalizzata" non compresse, "Salva Preventivo" a larghezza
+    piena, "Elimina" con lo stesso `backgroundColor`/`foregroundColor` e senza
+    `TextStyle` hardcoded, nessun pulsante con `tapTargetSize` shrinkWrap e
+    bottone "Aggiorna" della barra di sync all'altezza standard.
+  - **`test/design_tokens_test.dart`**: asserzioni sui nuovi token `AppButtons` e
+    sulla geometria di `elevatedButtonTheme` / `filledButtonTheme` /
+    `outlinedButtonTheme` / `textButtonTheme` / `floatingActionButtonTheme`
+    (raggio `AppRadii.xl`, altezza minima condivisa, `AppTextStyles.labelLg`).
+
 ## [1.8.0] - 2026-10-10
 
 ### Added

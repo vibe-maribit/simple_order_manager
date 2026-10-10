@@ -1542,10 +1542,12 @@ class _OrdersTabState extends State<OrdersTab> {
     return Container(
       width: double.infinity,
       color: AppColors.surfaceContainerHigh,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.margin,
-        vertical: AppSpacing.spaceSm,
-      ),
+      // Nessun padding verticale: è il bottone "Aggiorna", ora all'altezza
+      // standard di ogni altro pulsante (48 px con area di tap piena), a
+      // dettare l'altezza della barra. Con il vecchio `shrinkWrap` il padding
+      // serviva a compensare un bottone di 12 px e aggiungeva 36 px di
+      // altezza spingendo fuori dal viewport la lista documenti.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.margin),
       child: Row(
         children: [
           Flexible(
@@ -1595,20 +1597,12 @@ class _OrdersTabState extends State<OrdersTab> {
               ),
             ),
           ),
+          // Nessuno `style:` a per-corpo: il bottone prende raggio, altezza,
+          // padding e area di tap da `textButtonTheme`, come tutti gli altri.
           TextButton(
             key: kSyncRefreshKey,
             onPressed: _syncNow,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.spaceSm,
-              ),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Aggiorna',
-              style: AppTextStyles.labelMd,
-            ),
+            child: const Text('Aggiorna'),
           ),
         ],
       ),
@@ -1818,21 +1812,13 @@ class _OrdersTabState extends State<OrdersTab> {
               key: kBannerCtaKey,
               onPressed: () => _openOrderEditor(null),
               style: ElevatedButton.styleFrom(
+                // Inversione bianco/ocra richiesta dal gradiente del banner:
+                // il resto della geometria arriva dal tema (stesso raggio,
+                // altezza e area di tap di ogni altro pulsante).
                 backgroundColor: AppColors.onPrimary,
                 foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.spaceMd,
-                  vertical: AppSpacing.spaceSm,
-                ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(
-                'Crea',
-                style: AppTextStyles.labelLg.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
+              child: const Text('Crea'),
             ),
           ],
         ),
@@ -2233,7 +2219,7 @@ class _OrdersTabState extends State<OrdersTab> {
         borderRadius: BorderRadius.circular(AppRadii.xl),
         onTap: onPressed,
         child: Container(
-          height: 40,
+          height: AppButtons.minHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceSm),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.xl),
@@ -2547,10 +2533,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.errorContainer,
-                          foregroundColor: AppColors.onErrorContainer,
-                        ),
+                        style: AppButtons.destructiveStyle,
                         icon: const Icon(Icons.delete),
                         label: const Text('Elimina'),
                         onPressed: () {
@@ -2583,13 +2566,12 @@ class _OrdersTabState extends State<OrdersTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteOrder(order.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),
@@ -3270,29 +3252,38 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Items title & add buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Intestazione delle voci: il titolo occupa la riga superiore e i
+          // due pulsanti quella sotto. Con il layout precedente (titolo e
+          // pulsanti affiancati nella stessa `Row`) la somma delle larghezze
+          // naturali superava i 288 px disponibili a 320 dp — anche a 360 dp
+          // — e la `Row` andava in overflow.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Voci Preventivo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                style: AppTextStyles.headlineSm.copyWith(
                   color: AppColors.onSurface,
                 ),
               ),
-              Row(
+              const SizedBox(height: AppSpacing.gutter),
+              // `Wrap` e non `Row`: i pulsanti restano alla loro larghezza
+              // naturale (nessuna label troncata) e vanno in riga successiva
+              // su viewport più stretti.
+              Wrap(
+                spacing: AppSpacing.gutter,
+                runSpacing: AppSpacing.spaceXs,
                 children: [
                   OutlinedButton.icon(
+                    key: const Key('order-items-catalog'),
                     onPressed: _showCatalogPicker,
-                    icon: const Icon(Icons.inventory, size: 16),
+                    icon: const Icon(Icons.inventory),
                     label: const Text('Catalogo'),
                   ),
-                  const SizedBox(width: 8),
                   ElevatedButton.icon(
+                    key: const Key('order-items-custom'),
                     onPressed: _addCustomItem,
-                    icon: const Icon(Icons.add, size: 16),
+                    icon: const Icon(Icons.add),
                     label: const Text('Personalizzata'),
                   ),
                 ],
@@ -3407,10 +3398,20 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               padding: const EdgeInsets.all(AppSpacing.spaceMd),
               child: Column(
                 children: [
+                  // Le label delle righe totali sono più larghe del contenuto
+                  // disponibile a 320/360 dp ("Subtotale Imponibile:" da sola
+                  // misura ~299 px su 296 px utili): senza `Expanded` + ellipsis
+                  // la `Row` andava in overflow.
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Subtotale Imponibile:'),
+                      const Expanded(
+                        child: Text(
+                          'Subtotale Imponibile:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         '€ ${_subtotal.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -3419,9 +3420,15 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   ),
                   const SizedBox(height: 6),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Totale Imposte/IVA:'),
+                      const Expanded(
+                        child: Text(
+                          'Totale Imposte/IVA:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         '€ ${_taxTotal.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -3430,21 +3437,21 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   ),
                   const Divider(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'TOTALE COMPLESSIVO:',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
+                      Expanded(
+                        child: Text(
+                          'TOTALE COMPLESSIVO:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.onSurface,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         formatEuro(_grandTotal),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyles.currencyCard.copyWith(
                           color: AppColors.primary,
                         ),
                       ),
@@ -3455,18 +3462,17 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
+          // CTA a larghezza pulla come gli altri primary: il padding
+          // `EdgeInsets.all(16)` e il `fontSize: 16` hardcoded producevano
+          // un'altezza (~56 px) e un raggio diversi da tutti i pulsanti.
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              key: const Key('order-edit-save-cta'),
+              icon: const Icon(Icons.save),
+              label: const Text('Salva Preventivo'),
+              onPressed: _saveOrder,
             ),
-            icon: const Icon(Icons.save),
-            label: const Text(
-              'Salva Preventivo',
-              style: TextStyle(fontSize: 16),
-            ),
-            onPressed: _saveOrder,
           ),
         ],
       ),
@@ -3542,6 +3548,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: ElevatedButton(
+                                key: const Key('catalog-picker-select'),
                                 onPressed: () {
                                   _addItemFromCatalog(cat);
                                   Navigator.pop(ctx);
@@ -4078,13 +4085,12 @@ class _ClientsTabState extends State<ClientsTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteClient(client.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),
@@ -4486,13 +4492,12 @@ class _CatalogTabState extends State<CatalogTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteItem(item.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),
