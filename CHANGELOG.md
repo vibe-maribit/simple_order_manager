@@ -8,6 +8,43 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.8.2] - 2026-10-10
+
+### Fixed
+
+- **Chip filtro "schiacciati" nella tab Documenti**: le etichette "Tutti",
+  "Preventivi", "Ordini" e "Bozze" (con il rispettivo contatore) venivano
+  tagliate perché la `ListView` orizzontale era incorniciata da un
+  `SizedBox(height: 48)` **con dentro** il padding verticale: al pulsante
+  restavano `48 - 16 - 8 = 24 px`, meno di quanto ne servono a testo (~20 px)
+  + padding (16 px) + bordo (2 px).
+  - **`lib/main.dart`**: `_buildFilterChips()` non ha più altezze fisse — il
+    `SizedBox(height: 48)` e la `ListView.separated` sono sostituiti da un
+    `IntrinsicHeight` con dentro un `SingleChildScrollView` orizzontale e una
+    `Row(mainAxisSize: MainAxisSize.min)`; l'altezza è derivata dal contenuto e
+    la riga resta scollabile. Il padding verticale è passato sul `Padding`
+    esterno (16 px sopra, 8 px sotto: ritmo invariato rispetto a prima), quindi
+    non ruba più spazio al chip.
+  - **`lib/main.dart`**: il `Container` del chip non ha padding orizzontale
+    `AppSpacing.spaceMd` (16 px) ma `AppSpacing.gutter` (12 px); il padding
+    verticale resta `AppSpacing.spaceSm` (8 px). Nessuna larghezza, altezza o
+    `constraints` fissa: la larghezza arriva solo dal `Row` interno con
+    `MainAxisSize.min`, quindi il chip si dimensiona sulla lunghezza della scritta
+    (chip alto 38 px, label non più troncata).
+  - **`lib/theme/app_theme.dart`**: allineato anche `chipTheme.padding` a
+    12 px orizzontali / 8 px verticali, così i `Chip` Material e i chip
+    hand-built non divergono.
+
+- Test:
+  - **`test/documents_ui_test.dart`**: nuovo group `Geometria chip filtri` (6
+    test) — altezza resa del chip ≥ testo + `2 × paddingV` + bordo, label e
+    contatori senza overflow di righe, padding orizzontale di 12 px con larghezza
+    proporzionale alla label ("Preventivi" più largo di "Bozze"), spaziatura
+    verticale 16 px sopra / 8 px sotto invariata, nessun errore di layout a
+    320×640 con testo al 130% (chip ancora raggiungibile con lo swipe
+    orizzontale) e nessuna dimensione rigida nel widget del chip. I 5 test
+    funzionali di `Filtri chip` restano invariati.
+
 ## [1.8.1] - 2026-10-10
 
 ### Fixed

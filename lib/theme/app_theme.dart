@@ -407,7 +407,7 @@ abstract final class AppTheme {
         side: BorderSide(color: scheme.outlineVariant),
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.spaceSm,
+          horizontal: AppSpacing.gutter,
           vertical: AppSpacing.spaceSm,
         ),
         showCheckmark: false,

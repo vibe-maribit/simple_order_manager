@@ -1861,23 +1861,41 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
+  /// Riga dei chip filtro.
+  ///
+  /// Nessuna altezza rigida: il vecchio `SizedBox(height: 48)` incorniciava la
+  /// `ListView` orizzontale e, con il padding verticale applicato *dentro* lo
+  /// scroll, lasciava al chip solo `48 - 16 - 8 = 24 px` — meno di quanto ne
+  /// servono a testo + padding + bordo, quindi le label ("Tutti",
+  /// "Preventivi"…) venivano tagliate. Qui l'altezza è derivata dal
+  /// contenuto (`IntrinsicHeight`), il padding verticale sta sul `Padding`
+  /// esterno e i chip si dimensionano sulla lunghezza della scritta.
   Widget _buildFilterChips() {
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.margin,
-          AppSpacing.spaceMd,
-          AppSpacing.margin,
-          AppSpacing.spaceSm,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.margin,
+        AppSpacing.spaceMd,
+        AppSpacing.margin,
+        AppSpacing.spaceSm,
+      ),
+      child: IntrinsicHeight(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (var index = 0;
+                  index < _DocumentFilter.values.length;
+                  index++) ...<Widget>[
+                if (index > 0) const SizedBox(width: AppSpacing.spaceSm),
+                _buildFilterChip(
+                  _DocumentFilter.values[index],
+                  _countFor(_DocumentFilter.values[index]),
+                ),
+              ],
+            ],
+          ),
         ),
-        itemCount: _DocumentFilter.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.spaceSm),
-        itemBuilder: (_, index) {
-          final filter = _DocumentFilter.values[index];
-          return _buildFilterChip(filter, _countFor(filter));
-        },
       ),
     );
   }
@@ -1901,7 +1919,7 @@ class _OrdersTabState extends State<OrdersTab> {
           onTap: () => _selectFilter(filter),
           child: Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.spaceMd,
+              horizontal: AppSpacing.gutter,
               vertical: AppSpacing.spaceSm,
             ),
             decoration: BoxDecoration(

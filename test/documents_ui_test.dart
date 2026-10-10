@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -148,6 +149,16 @@ void _mockClipboard(WidgetTester tester) {
 Finder _inCard(String orderId, Finder matcher) => find.descendant(
       of: find.byKey(Key('document-card-$orderId')),
       matching: matcher,
+    );
+
+/// Finder del chip filtro [filter] (nome dell'enum `_DocumentFilter`).
+Finder _chip(String filter) => find.byKey(Key('filter-chip-$filter'));
+
+/// Finder del testo [label] dentro il chip [filter]: limitato al chip, per non
+/// pescare le occorrenze omonime nelle card dei documenti.
+Finder _chipLabel(String filter, String label) => find.descendant(
+      of: _chip(filter),
+      matching: find.text(label),
     );
 
 /// Intercetta il canale nativo di `share_plus` e restituisce la lista delle
@@ -463,6 +474,185 @@ void main() {
           reason: 'chip $filter: atteso $count',
         );
       });
+    });
+  });
+
+  /// Regressione grafica dei chip filtro (issue "chip schiacciati").
+  ///
+  /// La riga era un `SizedBox(height: 48)` che avvolgeva la `ListView`
+  /// orizzontale con dentro il padding verticale: al chip restavano
+  /// `48 - 16 - 8 = 24 px`, meno di testo (20) + padding (16) + bordo (2), e la
+  /// scritta veniva tagliata. La riga ora non ha altezze fisse e i chip si
+  /// dimensionano sulla lunghezza della label.
+  group('Geometria chip filtri', () {
+    testWidgets('il chip è alto quanto il testo più padding e bordo', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      // Prima del fix: chip 24 px, label compressa a 6 px.
+      const expected = <String, String>{
+        'tutti': 'Tutti',
+        'preventivi': 'Preventivi',
+        'ordini': 'Ordini',
+        'bozze': 'Bozze',
+      };
+      expected.forEach((filter, label) {
+        final chipHeight = tester.getSize(_chip(filter)).height;
+        final labelHeight = tester.getSize(_chipLabel(filter, label)).height;
+        expect(
+          chipHeight,
+          greaterThanOrEqualTo(
+            labelHeight + 2 * AppSpacing.spaceSm + 2,
+          ),
+          reason: 'chip "$label" alto $chipHeight px: il testo '
+              '($labelHeight px) viene tagliato',
+        );
+      });
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('la label non è troncata e il contatore è leggibile', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      for (final entry in <(String, String, String)>[
+        ('tutti', 'Tutti', '(4)'),
+        ('preventivi', 'Preventivi', '(2)'),
+        ('ordini', 'Ordini', '(2)'),
+        ('bozze', 'Bozze', '(1)'),
+      ]) {
+        final (filter, label, count) = entry;
+        for (final text in <String>[label, count]) {
+          final finder = _chipLabel(filter, text);
+          expect(finder, findsOneWidget);
+          expect(
+            tester.firstRenderObject<RenderParagraph>(finder).didExceedMaxLines,
+            isFalse,
+            reason: '"$text" nel chip $filter supera le righe disponibili',
+          );
+        }
+      }
+    });
+
+    testWidgets(
+        'il padding orizzontale è di 12 px e la larghezza segue la label', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      expect(AppSpacing.gutter, equals(12));
+
+      const expected = <String, String>{
+        'tutti': 'Tutti',
+        'preventivi': 'Preventivi',
+        'ordini': 'Ordini',
+        'bozze': 'Bozze',
+      };
+      expected.forEach((filter, label) {
+        final chipWidth = tester.getSize(_chip(filter)).width;
+        final labelWidth = tester.getSize(_chipLabel(filter, label)).width;
+        expect(
+          chipWidth,
+          greaterThan(labelWidth + 2 * AppSpacing.gutter),
+          reason:
+              'chip "$label" largo solo $chipWidth px: il padding orizzontale '
+              'di ${AppSpacing.gutter} px non c\'è',
+        );
+      });
+
+      // La larghezza è derivata dalla scritta (`MainAxisSize.min`), non da una
+      // misura fissa: l'etichetta più lunga dà il chip più largo.
+      expect(
+        tester.getSize(_chip('preventivi')).width,
+        greaterThan(tester.getSize(_chip('bozze')).width),
+      );
+    });
+
+    testWidgets('la spaziatura verticale della sezione è invariata', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      // 16 px sopra i chip (il campo di ricerca non ha padding inferiore).
+      final search = find.byKey(const Key('documents-search-field'));
+      expect(
+        tester.getTopLeft(_chip('tutti')).dy - tester.getBottomLeft(search).dy,
+        closeTo(AppSpacing.spaceMd, 0.5),
+      );
+
+      // 8 px sotto i chip + i 20 px del titolo "Documenti Recenti".
+      expect(
+        tester.getTopLeft(find.text('Documenti Recenti')).dy -
+            tester.getBottomLeft(_chip('tutti')).dy,
+        closeTo(AppSpacing.spaceSm + AppSpacing.spaceLg, 0.5),
+      );
+    });
+
+    testWidgets('nessun errore di layout a 320x640 con testo scalato', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      // La riga non ha altezze fisse: si allarga e resta scollabile.
+      expect(tester.takeException(), isNull);
+      final chip = tester.getSize(_chip('tutti'));
+      final scaled = tester.getSize(_chipLabel('tutti', 'Tutti'));
+      expect(
+        chip.height,
+        greaterThanOrEqualTo(scaled.height + 2 * AppSpacing.spaceSm + 2),
+        reason: 'il chip non segue il testo scalato',
+      );
+
+      // L'ultimo chip resta raggiungibile con lo swipe orizzontale: a 320 px
+      // con testo al 130% la riga è più larga del viewport.
+      await tester.ensureVisible(_chip('tutti'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      final before = tester.getTopLeft(_chip('bozze')).dx;
+      await tester.drag(_chip('tutti'), const Offset(-400, 0));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(_chip('bozze')).dx, lessThan(before));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('i chip non hanno dimensioni fisse imposte dal widget', (
+      WidgetTester tester,
+    ) async {
+      await _pumpDocumentsTab(tester, _buildOrders());
+
+      // Un chip che portasse width/height/minWidth/constraints rigidi
+      // riprodurrebbe il difetto: qui la larghezza arriva solo dal
+      // `Row(mainAxisSize: MainAxisSize.min)` interno.
+      final boxes = tester
+          .widgetList<Container>(
+            find.descendant(
+                of: _chip('preventivi'), matching: find.byType(Container)),
+          )
+          .toList();
+      expect(boxes, hasLength(1));
+      expect(boxes.single.constraints, isNull);
+      expect(boxes.single.margin, isNull);
+
+      final sizedBoxes = tester
+          .widgetList<SizedBox>(
+            find.descendant(
+                of: _chip('preventivi'), matching: find.byType(SizedBox)),
+          )
+          .toList();
+      expect(sizedBoxes, hasLength(1),
+          reason: 'solo il gap fra label e contatore');
+      expect(sizedBoxes.single.width, equals(AppSpacing.spaceXs));
+      expect(sizedBoxes.single.height, isNull);
     });
   });
 
