@@ -8,6 +8,27 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.8.0] - 2026-10-10
+
+### Added
+
+- **Ricerca di articoli e clienti** potenziata in tutta l'app:
+  - Tab **Clienti**: il campo di ricerca filtra per nome, telefono, email,
+    **indirizzo** e **note** (case-insensitive, con `trim`); il pulsante **clear**
+    ripristina l'elenco completo e lo stato "nessun risultato per la ricerca" è
+    distinto da "nessun cliente in rubrica".
+  - Tab **Catalogo**: la ricerca filtra per nome, descrizione, unità di misura,
+    **divisa** e **sconto** (case-insensitive, con `trim`) e distingue lo stato
+    "nessun risultato" dal listino vuoto (~12.351 voci).
+  - **Picker catalogo** in `OrderEditScreen`: il bottom sheet ha un campo di
+    ricerca che filtra il listino in tempo reale (`catalog-picker-search-field`)
+    e permette di selezionare una voce con un tap.
+  - **Selettore cliente** in `OrderEditScreen`: campo "Cliente Selezionato"
+    ricercabile per nome/telefono/email (`client-picker-search-field`) che
+    aggiorna `_selectedClient` e il `clientId`/`clientName` del documento salvato.
+  - `AppSearchField` condiviso: `TextEditingController` opzionale e pulsante
+    **clear** (`Icons.close`, visibile solo a query non vuota).
+
 ## [1.7.0] - 2026-10-10
 
 ### Fixed
