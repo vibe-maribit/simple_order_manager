@@ -70,29 +70,70 @@ class CatalogItem {
   final String id;
   final String name;
   final String description;
+
+  /// Unità di misura della colonna B del listino (es. `NR`, `KG`, `LT`).
+  ///
+  /// Campo informativo ereditato dal catalogo importato in #25; non partecipa
+  /// ai calcoli. Default `''` per i dati salvati prima dell'introduzione.
+  final String unitOfMeasure;
+
+  /// Divisa del listino (colonna C, `E` = euro).
+  ///
+  /// Valore testuale così com'è nel file originale; [currencySymbol] lo
+  /// traduce per la UI (`E` -> `€`). Default `E`.
+  final String currency;
+
+  /// Sconti applicati (colonna E), testo informativo non calcolato.
+  ///
+  /// Esempi dal listino: `30,00`, `35,00   10,00`. Resta una stringa: le voci
+  /// del preventivo la riportano ma i totali non ne tengono conto (sconto
+  /// negoziato a parte).
+  final String discount;
+
   final double unitPrice;
   final double taxRate; // in percentage, e.g. 22.0
 
-  CatalogItem({
+  const CatalogItem({
     required this.id,
     required this.name,
     this.description = '',
     required this.unitPrice,
     this.taxRate = 22.0,
+    this.unitOfMeasure = '',
+    this.currency = 'E',
+    this.discount = '',
   });
+
+  /// Simbolo della divisa: `E`/`EUR`/`€` -> `€`, altrimenti la stringa.
+  String get currencySymbol {
+    final c = currency.trim().toUpperCase();
+    if (c == 'E' || c == 'EUR' || c == '€') return '€';
+    return currency;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         'description': description,
+        'unitOfMeasure': unitOfMeasure,
+        'currency': currency,
+        'discount': discount,
         'unitPrice': unitPrice,
         'taxRate': taxRate,
       };
 
+  /// Parsing **tollerante**: chiavi assenti o di tipo errato (JSON scritto a
+  /// mano o versione precedente) ricadono sui default, senza eccezioni.
   factory CatalogItem.fromJson(Map<String, dynamic> json) => CatalogItem(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? '',
         description: json['description'] as String? ?? '',
+        unitOfMeasure: json['unitOfMeasure'] is String
+            ? json['unitOfMeasure'] as String
+            : '',
+        currency: json['currency'] is String ? json['currency'] as String : 'E',
+        discount:
+            json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
       );
@@ -101,6 +142,9 @@ class CatalogItem {
     String? id,
     String? name,
     String? description,
+    String? unitOfMeasure,
+    String? currency,
+    String? discount,
     double? unitPrice,
     double? taxRate,
   }) {
@@ -108,6 +152,9 @@ class CatalogItem {
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
+      unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
+      currency: currency ?? this.currency,
+      discount: discount ?? this.discount,
       unitPrice: unitPrice ?? this.unitPrice,
       taxRate: taxRate ?? this.taxRate,
     );
@@ -119,6 +166,16 @@ class OrderItem {
   final String catalogItemId;
   final String name;
   final String description;
+
+  /// Unità di misura copiata dal catalogo al momento dell'aggiunta (colonna B
+  /// del listino). Informativa: non altera i calcoli.
+  final String unitOfMeasure;
+
+  /// Sconti copiati dal catalogo (colonna E). Informativa: resta fuori dalla
+  /// matematica subtotale/IVA/totale, che rimane quella delle versioni
+  /// precedenti.
+  final String discount;
+
   final double unitPrice;
   final double taxRate;
   double quantity;
@@ -128,6 +185,8 @@ class OrderItem {
     required this.catalogItemId,
     required this.name,
     this.description = '',
+    this.unitOfMeasure = '',
+    this.discount = '',
     required this.unitPrice,
     this.taxRate = 22.0,
     this.quantity = 1.0,
@@ -142,16 +201,25 @@ class OrderItem {
         'catalogItemId': catalogItemId,
         'name': name,
         'description': description,
+        'unitOfMeasure': unitOfMeasure,
+        'discount': discount,
         'unitPrice': unitPrice,
         'taxRate': taxRate,
         'quantity': quantity,
       };
 
+  /// Parsing **tollerante**: come [CatalogItem.fromJson], le chiavi nuove
+  /// possono mancare nei dati salvati prima della versione 1.7.0.
   factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
         id: json['id'] as String? ?? '',
         catalogItemId: json['catalogItemId'] as String? ?? '',
         name: json['name'] as String? ?? '',
         description: json['description'] as String? ?? '',
+        unitOfMeasure: json['unitOfMeasure'] is String
+            ? json['unitOfMeasure'] as String
+            : '',
+        discount:
+            json['discount'] is String ? json['discount'] as String : '',
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
         quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,

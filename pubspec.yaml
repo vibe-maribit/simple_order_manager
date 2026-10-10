@@ -1,7 +1,7 @@
 name: simple_order_manager
 description: "Gestione preventivi, ordini, clienti e catalogo senza fatturazione"
 publish_to: 'none'
-version: 1.6.0+8
+version: 1.7.0+9
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -51,6 +51,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # Catalogo importato dal listino allegato alla issue #25 (12.351 articoli,
+    # colonne A–F: descrizione, unità di misura, divisa, prezzo, sconti, IVA).
+    # Viene caricato al primo avvio quando non esistono ancora dati salvati e
+    # non viene sovrascritto finché l'utente non modifica il listino.
+    - assets/catalog/catalogo.json
 
   fonts:
     - family: Inter

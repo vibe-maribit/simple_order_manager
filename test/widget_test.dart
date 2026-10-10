@@ -29,10 +29,13 @@ void main() {
     });
 
     test('CatalogItem JSON Serialization', () {
-      final item = CatalogItem(
+      const item = CatalogItem(
         id: 'p_test',
         name: 'Test Service',
         description: 'Quality Service',
+        unitOfMeasure: 'NR',
+        currency: 'E',
+        discount: '35,00',
         unitPrice: 50.0,
         taxRate: 22.0,
       );
@@ -44,6 +47,48 @@ void main() {
       expect(deserialized.name, equals('Test Service'));
       expect(deserialized.unitPrice, equals(50.0));
       expect(deserialized.taxRate, equals(22.0));
+      expect(deserialized.unitOfMeasure, equals('NR'));
+      expect(deserialized.currency, equals('E'));
+      expect(deserialized.currencySymbol, equals('€'));
+      expect(deserialized.discount, equals('35,00'));
+
+      final copied = deserialized.copyWith(unitOfMeasure: 'KG');
+      expect(copied.unitOfMeasure, equals('KG'));
+      expect(copied.discount, equals('35,00'));
+    });
+
+    test('CatalogItem.fromJson legacy data gets backward-compatible defaults',
+        () {
+      final legacy = CatalogItem.fromJson(<String, dynamic>{
+        'id': 'p_legacy',
+        'name': 'Old Service',
+        'unitPrice': 10.0,
+        'taxRate': 22.0,
+      });
+
+      expect(legacy.unitOfMeasure, equals(''));
+      expect(legacy.currency, equals('E'));
+      expect(legacy.currencySymbol, equals('€'));
+      expect(legacy.discount, equals(''));
+      expect(legacy.unitPrice, equals(10.0));
+      expect(legacy.taxRate, equals(22.0));
+    });
+
+    test('OrderItem.fromJson legacy data gets backward-compatible defaults', () {
+      final legacy = OrderItem.fromJson(<String, dynamic>{
+        'id': 'oi_legacy',
+        'catalogItemId': 'p_legacy',
+        'name': 'Old Product',
+        'unitPrice': 5.0,
+        'taxRate': 10.0,
+        'quantity': 2.0,
+      });
+
+      expect(legacy.unitOfMeasure, equals(''));
+      expect(legacy.discount, equals(''));
+      expect(legacy.subtotal, equals(10.0));
+      expect(legacy.taxAmount, equals(1.0));
+      expect(legacy.total, equals(11.0));
     });
 
     test('OrderItem calculations (Subtotal, Tax, Total)', () {

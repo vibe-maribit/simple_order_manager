@@ -8,6 +8,37 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.7.0] - 2026-10-10
+
+### Fixed
+
+- **Inserimento vocale su APK release (#24)**: il manifest Android ora dichiara
+  `android.permission.INTERNET` (assente fino a questa versione), che mancava solo
+  nei build `release` (in `debug`/`profile` lo inietta Flutter). Senza il permesso
+  l'app non risolveva alcun host e l'inserimento vocale falliva con
+  `Errore di rete: Failed host lookup: 'generativelanguage.googleapis.com'`; lo stesso
+  blocco impediva anche l'invio SMTP dei documenti.
+
+### Added
+
+- **Catalogo dal listino allegato alla issue #25** (`corretto.10.2026.xlsx`,
+  12.351 articoli):
+  - `tool/build_catalog.py` (nuovo): converte l'XLSX in
+    `assets/catalog/catalogo.json` in modo deterministico (parsing di
+    `sharedStrings.xml` + `sheet1.xml`, id stabili `cat-<n>`, `,` → `.`,
+    IVA vuota → `22.0`), senza dipendenze esterne.
+  - `lib/models/models.dart`: `CatalogItem` espone `unitOfMeasure`, `currency`
+    (default `E`, getter `currencySymbol` → `€`) e `discount`; `OrderItem`
+    riceve `unitOfMeasure` e `discount` dal catalogo. `toJson`/`fromJson`/`copyWith`
+    sono tolleranti verso i dati salvati senza le nuove chiavi (default
+    retro-compatibili), e i calcoli subtotale/IVA/totale restano invariati.
+  - `lib/main.dart`: al primo avvio (senza dati nel `SharedPreferences`) il tab
+    **Catalogo** carica l'asset incluso; card, editor articolo, picker catalogo e
+    card voce del preventivo mostrano unità di misura, divisa come `€` e sconti.
+  - `lib/documents/document_pdf.dart`: l'unità di misura viene accodata alla
+    colonna `Q.tà` (es. `2 NR`) e lo sconto compare in coda alla descrizione,
+    senza modificare colonne né totali.
+
 ## [Unreleased]
 
 ### Added
