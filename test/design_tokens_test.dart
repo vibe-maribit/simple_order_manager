@@ -168,7 +168,8 @@ void main() {
       );
       expect(AppButtons.shape.borderRadius,
           equals(const BorderRadius.all(Radius.circular(AppRadii.xl))));
-      expect(AppButtons.minimumSize, equals(const Size(0, AppButtons.minHeight)));
+      expect(
+          AppButtons.minimumSize, equals(const Size(0, AppButtons.minHeight)));
     });
 
     test('gli stili distruttivi usano solo token colore', () {
@@ -181,12 +182,13 @@ void main() {
         equals(AppColors.onPrimary),
       );
       expect(
-        AppButtons.destructiveOutlinedStyle
-            .foregroundColor?.resolve(<WidgetState>{}),
+        AppButtons.destructiveOutlinedStyle.foregroundColor
+            ?.resolve(<WidgetState>{}),
         equals(AppColors.error),
       );
       expect(
-        AppButtons.destructiveOutlinedStyle.side?.resolve(<WidgetState>{})?.color,
+        AppButtons.destructiveOutlinedStyle.side
+            ?.resolve(<WidgetState>{})?.color,
         equals(AppColors.error),
       );
     });
@@ -228,7 +230,8 @@ void main() {
       );
     });
 
-    test('elevated/filled/outlined/text condividono raggio, altezza e label', () {
+    test('elevated/filled/outlined/text condividono raggio, altezza e label',
+        () {
       final theme = AppTheme.light;
       final families = <String, ButtonStyle?>{
         'elevated': theme.elevatedButtonTheme.style,
@@ -261,7 +264,8 @@ void main() {
     test('i filled/elevated sono senza elevazione', () {
       final theme = AppTheme.light;
 
-      expect(theme.elevatedButtonTheme.style?.elevation?.resolve(<WidgetState>{}),
+      expect(
+          theme.elevatedButtonTheme.style?.elevation?.resolve(<WidgetState>{}),
           equals(0));
       expect(theme.filledButtonTheme.style?.elevation?.resolve(<WidgetState>{}),
           equals(0));
@@ -269,7 +273,8 @@ void main() {
 
     test('il FAB usa un raggio derivato da AppRadii', () {
       final theme = AppTheme.light;
-      final shape = theme.floatingActionButtonTheme.shape! as RoundedRectangleBorder;
+      final shape =
+          theme.floatingActionButtonTheme.shape! as RoundedRectangleBorder;
 
       expect(shape.borderRadius, equals(BorderRadius.circular(AppRadii.full)));
       expect(theme.floatingActionButtonTheme.elevation, equals(0));

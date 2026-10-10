@@ -74,7 +74,8 @@ void main() {
       expect(legacy.taxRate, equals(22.0));
     });
 
-    test('OrderItem.fromJson legacy data gets backward-compatible defaults', () {
+    test('OrderItem.fromJson legacy data gets backward-compatible defaults',
+        () {
       final legacy = OrderItem.fromJson(<String, dynamic>{
         'id': 'oi_legacy',
         'catalogItemId': 'p_legacy',

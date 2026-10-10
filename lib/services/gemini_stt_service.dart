@@ -82,7 +82,8 @@ class VoiceOrderDraft {
         );
       }
     }
-    return VoiceOrderDraft(customerName: text(json['customer_name']), lines: lines);
+    return VoiceOrderDraft(
+        customerName: text(json['customer_name']), lines: lines);
   }
 
   /// Estrae il JSON dal testo del modello, tollerante ai fence
@@ -177,9 +178,8 @@ class GeminiModelInfo {
         : const <String>[];
     return GeminiModelInfo(
       name: json['name'] is String ? json['name'] as String : '',
-      displayName: json['displayName'] is String
-          ? json['displayName'] as String
-          : '',
+      displayName:
+          json['displayName'] is String ? json['displayName'] as String : '',
       supportedGenerationMethods: strings(json['supportedGenerationMethods']),
       inputModalities: strings(json['inputModalities']),
       outputModalities: strings(json['outputModalities']),
@@ -424,17 +424,22 @@ class GeminiSttService {
       var score = 0;
       final sameFamily = parsed.family == failed.family;
       final sameTier = parsed.tier.isNotEmpty && parsed.tier == failed.tier;
-      if (sameFamily && sameTier && _isNewerVersion(parsed.version, failed.version)) {
+      if (sameFamily &&
+          sameTier &&
+          _isNewerVersion(parsed.version, failed.version)) {
         score = 4;
       } else if (sameFamily && sameTier) {
         score = 3;
       } else if (sameTier) {
         score = 2;
-      } else if (sameFamily && failed.tier.isNotEmpty && parsed.tier.isNotEmpty) {
+      } else if (sameFamily &&
+          failed.tier.isNotEmpty &&
+          parsed.tier.isNotEmpty) {
         score = 1;
       }
       if (score > bestScore ||
-          (score == bestScore && _isNewerVersion(parsed.version, bestVersion))) {
+          (score == bestScore &&
+              _isNewerVersion(parsed.version, bestVersion))) {
         best = id;
         bestScore = score;
         bestVersion = parsed.version;
@@ -612,8 +617,7 @@ class GeminiSttService {
     final GenerateContentResponse response;
     try {
       response = await model
-          .generateContent([Content.multi(parts)])
-          .timeout(_generationTimeout);
+          .generateContent([Content.multi(parts)]).timeout(_generationTimeout);
     } on Object catch (error) {
       throw _classifyError(error, modelId);
     }
@@ -675,9 +679,8 @@ class GeminiSttService {
 
     final GenerateContentResponse response;
     try {
-      response = await model
-          .generateContent([Content.data(mimeType, audioBytes)])
-          .timeout(_generationTimeout);
+      response = await model.generateContent(
+          [Content.data(mimeType, audioBytes)]).timeout(_generationTimeout);
     } on Object catch (error) {
       final classified = _classifyError(error, sttModel);
       // Nessun ulteriore fallback dopo la trascrizione: un modello che non
@@ -809,14 +812,14 @@ class GeminiSttService {
   }
 
   /// Chiede all'elenco dei modelli un sostituto per [failedModelId].
-  Future<String?> _bestReplacement(AiConfig config, String failedModelId) async {
+  Future<String?> _bestReplacement(
+      AiConfig config, String failedModelId) async {
     try {
       final models = await fetchModels(config);
       final wantsAudio = failedModelId.toLowerCase().contains('transcribe') ||
           failedModelId.toLowerCase().contains('speech');
-      final candidates = wantsAudio
-          ? filterSttModels(models)
-          : filterChatModels(models);
+      final candidates =
+          wantsAudio ? filterSttModels(models) : filterChatModels(models);
       return suggestReplacementModel(failedModelId, candidates);
     } on Object {
       return null;
@@ -847,8 +850,7 @@ class GeminiSttService {
     final family = tokens.first;
     var index = 1;
     var version = const <int>[];
-    if (tokens.length > 1 &&
-        RegExp(r'^\d+(\.\d+)*$').hasMatch(tokens[index])) {
+    if (tokens.length > 1 && RegExp(r'^\d+(\.\d+)*$').hasMatch(tokens[index])) {
       version = tokens[index]
           .split('.')
           .map((part) => int.tryParse(part) ?? 0)

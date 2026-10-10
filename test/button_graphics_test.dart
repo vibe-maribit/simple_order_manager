@@ -27,8 +27,7 @@ import 'package:simple_order_manager/theme/app_theme.dart';
 /// Border radius effettivamente risolto da uno stile pulsante.
 BorderRadius _radiusOf(ButtonStyle? style) {
   final shape = style?.shape?.resolve(<WidgetState>{});
-  return (shape! as RoundedRectangleBorder).borderRadius
-      as BorderRadius;
+  return (shape! as RoundedRectangleBorder).borderRadius as BorderRadius;
 }
 
 /// Altezza minima risolta da uno stile pulsante.
@@ -63,7 +62,8 @@ Finder _buttonWithText(String text) => find.ancestor(
 /// Stile del pulsante [finder], asserta che sia presente.
 ButtonStyle _styleAt(WidgetTester tester, Finder finder) {
   final style = tester.widget<ButtonStyleButton>(finder.first).style;
-  expect(style, isNotNull, reason: 'il pulsante deve avere uno stile esplicito');
+  expect(style, isNotNull,
+      reason: 'il pulsante deve avere uno stile esplicito');
   return style!;
 }
 
@@ -106,9 +106,10 @@ final WorkOrder _testOrder = WorkOrder(
 /// Seed delle preferenze con anagrafica e listino non vuoti.
 void _seedPrefs() {
   SharedPreferences.setMockInitialValues(<String, Object>{
-    'simple_orders_clients_v1': jsonEncode(<Client>[_testClient].map((c) => c.toJson()).toList()),
-    'simple_orders_catalog_v1':
-        jsonEncode(<CatalogItem>[_testCatalogItem].map((c) => c.toJson()).toList()),
+    'simple_orders_clients_v1':
+        jsonEncode(<Client>[_testClient].map((c) => c.toJson()).toList()),
+    'simple_orders_catalog_v1': jsonEncode(
+        <CatalogItem>[_testCatalogItem].map((c) => c.toJson()).toList()),
     'simple_orders_data_v1':
         jsonEncode(<WorkOrder>[_testOrder].map((o) => o.toJson()).toList()),
   });
@@ -241,11 +242,13 @@ void main() {
       expect(_minHeightOf(closeStyle), equals(AppButtons.minHeight));
 
       // Altezza resa a schermo: stessa area visibile per entrambi.
-      expect(tester.getSize(close).height, equals(tester.getSize(share).height));
+      expect(
+          tester.getSize(close).height, equals(tester.getSize(share).height));
       expect(tester.getSize(close).height, equals(kRenderedButtonHeight));
     });
 
-    testWidgets('le label dei due pulsanti sono centrate nei rispettivi bottoni', (
+    testWidgets(
+        'le label dei due pulsanti sono centrate nei rispettivi bottoni', (
       WidgetTester tester,
     ) async {
       await _pumpPdfPreview(tester, samplePdf);
@@ -261,7 +264,8 @@ void main() {
         (const Key('documents-pdf-share'), 'Condividi'),
       ]) {
         final button = find.byKey(entry.$1);
-        final label = find.descendant(of: button, matching: find.text(entry.$2));
+        final label =
+            find.descendant(of: button, matching: find.text(entry.$2));
         expect(label, findsOneWidget);
         expect(
           tester.getRect(label).center.dy,
@@ -273,7 +277,8 @@ void main() {
   });
 
   group('Geometria dei pulsanti — tema', () {
-    testWidgets('filledButtonTheme esiste ed è identico a elevatedButtonTheme', (
+    testWidgets('filledButtonTheme esiste ed è identico a elevatedButtonTheme',
+        (
       WidgetTester tester,
     ) async {
       final theme = AppTheme.light;
@@ -328,7 +333,8 @@ void main() {
       WidgetTester tester,
     ) async {
       final theme = AppTheme.light;
-      final shape = theme.floatingActionButtonTheme.shape! as RoundedRectangleBorder;
+      final shape =
+          theme.floatingActionButtonTheme.shape! as RoundedRectangleBorder;
 
       expect(shape.borderRadius, equals(BorderRadius.circular(AppRadii.full)));
     });
@@ -393,7 +399,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('"Salva Preventivo" è a larghezza piena e delle altezza standard', (
+    testWidgets(
+        '"Salva Preventivo" è a larghezza piena e delle altezza standard', (
       WidgetTester tester,
     ) async {
       _setViewport(tester, const Size(360, 640));
@@ -500,8 +507,8 @@ void main() {
       final banner = tester.widget<ElevatedButton>(
         find.byKey(const Key('documents-banner-cta')),
       );
-      expect(banner.style?.tapTargetSize,
-          isNot(MaterialTapTargetSize.shrinkWrap));
+      expect(
+          banner.style?.tapTargetSize, isNot(MaterialTapTargetSize.shrinkWrap));
       expect(banner.style?.minimumSize?.resolve(<WidgetState>{}),
           isNot(Size.zero));
 
@@ -556,7 +563,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('i pulsanti del banner hanno la stessa altezza dello standard', (
+    testWidgets('i pulsanti del banner hanno la stessa altezza dello standard',
+        (
       WidgetTester tester,
     ) async {
       _setViewport(tester, const Size(400, 900));

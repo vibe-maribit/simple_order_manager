@@ -51,7 +51,8 @@ void main() {
       }
     });
 
-    test('le voci note del listino combaciano (UM, divisa, prezzo, sconti, IVA)',
+    test(
+        'le voci note del listino combaciano (UM, divisa, prezzo, sconti, IVA)',
         () async {
       final raw = await rootBundle.loadString('assets/catalog/catalogo.json');
       final list = jsonDecode(raw) as List<dynamic>;
@@ -59,8 +60,7 @@ void main() {
         for (final e in list) e['name'] as String: e as Map<String, dynamic>,
       };
 
-      final duroglass =
-          byName['MPM DUROGLASS P6/1 RAL 7035 KG17.5'];
+      final duroglass = byName['MPM DUROGLASS P6/1 RAL 7035 KG17.5'];
       expect(duroglass, isNotNull);
       expect(duroglass!['id'], equals('cat-1'));
       expect(duroglass['unitOfMeasure'], equals('NR'));

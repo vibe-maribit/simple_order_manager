@@ -142,7 +142,8 @@ class _SettingsTabState extends State<SettingsTab> {
     // l'email principale del brand. Il valore resta solo nella copia di
     // lavoro finché l'utente non salva o modifica un campo (nessuna
     // persistenza implicita di un dato che l'utente non ha digitato).
-    if (_smtpDraft.isEmpty && EmailSmtpConfig.isValidEmail(_draft.emailPrimary)) {
+    if (_smtpDraft.isEmpty &&
+        EmailSmtpConfig.isValidEmail(_draft.emailPrimary)) {
       _smtpDraft = _smtpDraft.copyWith(fromEmail: _draft.emailPrimary);
     }
     _syncSmtpControllers(_smtpDraft);
@@ -415,8 +416,7 @@ class _SettingsTabState extends State<SettingsTab> {
               ? 'settings-smtp-saved-snackbar'
               : 'settings-smtp-save-invalid',
         ),
-        backgroundColor:
-            valid || empty ? null : AppColors.tertiaryFixed,
+        backgroundColor: valid || empty ? null : AppColors.tertiaryFixed,
         content: Text(
           valid
               ? 'Posta in uscita salvata'
@@ -829,9 +829,7 @@ class _SettingsTabState extends State<SettingsTab> {
               tooltip: _smtpExpanded ? 'Comprimi sezione' : 'Espandi sezione',
               visualDensity: VisualDensity.compact,
               icon: Icon(
-                _smtpExpanded
-                    ? Icons.expand_less
-                    : Icons.expand_more,
+                _smtpExpanded ? Icons.expand_less : Icons.expand_more,
                 color: AppColors.onSurfaceVariant,
               ),
               onPressed: () => setState(() => _smtpExpanded = !_smtpExpanded),
@@ -953,28 +951,27 @@ class _SettingsTabState extends State<SettingsTab> {
                     (config) => config.copyWith(password: value),
                   ),
                 ),
-                  _textField(
-                    key: 'settings-smtp-fromemail',
-                    controller: _smtpFromEmail,
-                    label: 'Da (email del mittente)',
-                    hint: 'mittente@esempio.it',
-                    icon: Icons.alternate_email,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    inputFormatters: [
-                      FilteringTextInputFormatter.deny(RegExp(r'\s'))
-                    ],
-                    errorText:
-                        _smtpFromEmail.text.trim().isNotEmpty &&
-                                !EmailSmtpConfig.isValidEmail(
-                                  _smtpDraft.fromEmail,
-                                )
-                            ? 'Indirizzo non valido: controlla email e spazi.'
-                            : null,
-                    onChanged: (value) => _onSmtpFieldChanged(
-                      (config) => config.copyWith(fromEmail: value),
-                    ),
+                _textField(
+                  key: 'settings-smtp-fromemail',
+                  controller: _smtpFromEmail,
+                  label: 'Da (email del mittente)',
+                  hint: 'mittente@esempio.it',
+                  icon: Icons.alternate_email,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                  ],
+                  errorText: _smtpFromEmail.text.trim().isNotEmpty &&
+                          !EmailSmtpConfig.isValidEmail(
+                            _smtpDraft.fromEmail,
+                          )
+                      ? 'Indirizzo non valido: controlla email e spazi.'
+                      : null,
+                  onChanged: (value) => _onSmtpFieldChanged(
+                    (config) => config.copyWith(fromEmail: value),
                   ),
+                ),
                 _textField(
                   key: 'settings-smtp-fromname',
                   controller: _smtpFromName,
@@ -1040,7 +1037,8 @@ class _SettingsTabState extends State<SettingsTab> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.network_check, size: 18),
                         label: Text(
@@ -1051,10 +1049,9 @@ class _SettingsTabState extends State<SettingsTab> {
                         // Configurazione incompleta: il test è disabilitato
                         // (nessuna chiamata di rete) e il motivo compare
                         // sotto la riga, così resta chiaro cosa manca.
-                        onPressed:
-                            (_smtpTesting || !_smtpDraft.isValid())
-                                ? null
-                                : _testSmtpConnection,
+                        onPressed: (_smtpTesting || !_smtpDraft.isValid())
+                            ? null
+                            : _testSmtpConnection,
                       ),
                     ),
                     if (_smtpDraft.isNotEmpty) ...[
