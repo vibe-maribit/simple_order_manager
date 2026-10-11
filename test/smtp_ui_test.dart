@@ -430,7 +430,8 @@ void main() {
       // L'invito a Impostazioni è in coda al foglio: si scende per vederlo.
       await tester.drag(
         find.byWidgetPredicate(
-          (widget) => widget is ListView && widget.scrollDirection == Axis.vertical,
+          (widget) =>
+              widget is ListView && widget.scrollDirection == Axis.vertical,
         ),
         const Offset(0, -400),
       );
@@ -448,7 +449,8 @@ void main() {
       await tester.tap(find.byKey(const Key('documents-detail-open-settings')));
       await tester.pumpAndSettle();
       expect(openedSettings, 1);
-      expect(find.byKey(const Key('documents-detail-export-pdf')), findsNothing);
+      expect(
+          find.byKey(const Key('documents-detail-export-pdf')), findsNothing);
     });
 
     testWidgets('senza posta in uscita il foglio firma indica Impostazioni', (

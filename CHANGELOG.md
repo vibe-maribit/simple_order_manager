@@ -8,36 +8,177 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.9.0] - 2026-10-11
+
+### Added
+
+- **Inserimento vocale collegato alla ricerca del database**: il pulsante
+  microfono in `OrderEditScreen` ora risolve cliente e voci dettate usando le
+  stesse predicate di ricerca delle tab Clienti e Catalogo, invece del matching
+  isolato precedente.
+  - `lib/utils/entity_search.dart`: modulo condiviso Dart puro
+    (`normalizeSearchText`, `searchClients` su nome/telefono/email/indirizzo/note,
+    `searchCatalog` su nome/descrizione/UM/divisa/sconto e
+    `bestClientMatch`/`bestCatalogMatch` con ranking deterministico
+    esatto > prefisso > sottostringa, tie-break su nome più corto e lunghezza
+    token, utile con i 12.351 articoli del listino).
+  - Le tab Clienti (`_ClientsTabState.build`) e Catalogo (`_CatalogTabState.build`)
+    chiamano `searchClients`/`searchCatalog`: unica definizione di "cerca", stessa
+    UI, stesse `Key` (`clients-search-field`, `catalog-search-field`) e stessi
+    stati vuoti a due vie.
+  - Il flusso vocale (`applyVoiceDraft`, pubblico `@visibleForTesting`) usa
+    `bestClientMatch`/`bestCatalogMatch`: a match esatto/parziale il cliente viene
+    selezionato e le voci entrano nel preventivo con `catalogItemId`, prezzo, IVA,
+    UM e sconto ereditati dal catalogo (factory `OrderItem.fromCatalog` in
+    `lib/models/models.dart`).
+  - Le voci non risolte restano inserite senza prezzo e generano l'avviso
+    `senza prezzo` nel messaggio `order-edit-voice-message`.
+  - **Foglio di selezione ricercabile** (`_SearchablePickSheet` in `lib/main.dart`)
+    precompilato col testo dettato quando cliente/articolo non è risolto o è
+    ambiguo: la scelta dell'utente completa l'inserimento del preventivo. Anche il
+    picker Catalogo (`_showCatalogPicker`) ha il campo di ricerca
+    (`catalog-picker-search-field`) con testo vuoto "Nessun articolo trovato per
+    la ricerca".
+  - `AppSearchField` accetta un `controller` opzionale per precompilare la ricerca.
+- Test: `test/entity_search_test.dart` (normalizzazione accenti/case/spazi, ricerca
+  per campo, ranking `best*Match` e ambiguità) ed estensioni in
+  `test/documents_ui_test.dart` (picker Catalogo ricercabile e inserimento della
+  voce con i dati del catalogo).
+
+## [1.8.2] - 2026-10-10
+
+### Changed
+
+- **Formattazione canonica dell'intero tree** (`dart format lib test`): 17 file
+  non erano allineati a `dart format` (righe spezzate che rientrano nei 80
+  caratteri, newline finali mancanti). Il fix è puramente meccanico e non
+  cambia comportamento: `dart format --output=none --set-exit-if-changed lib test`
+  ora esce pulito.
+
+### Fixed
+
+- **Chip filtro "schiacciati" nella tab Documenti**: le etichette "Tutti",
+  "Preventivi", "Ordini" e "Bozze" (con il rispettivo contatore) venivano
+  tagliate perché la `ListView` orizzontale era incorniciata da un
+  `SizedBox(height: 48)` **con dentro** il padding verticale: al pulsante
+  restavano `48 - 16 - 8 = 24 px`, meno di quanto ne servono a testo (~20 px)
+  + padding (16 px) + bordo (2 px).
+  - **`lib/main.dart`**: `_buildFilterChips()` non ha più altezze fisse — il
+    `SizedBox(height: 48)` e la `ListView.separated` sono sostituiti da un
+    `IntrinsicHeight` con dentro un `SingleChildScrollView` orizzontale e una
+    `Row(mainAxisSize: MainAxisSize.min)`; l'altezza è derivata dal contenuto e
+    la riga resta scollabile. Il padding verticale è passato sul `Padding`
+    esterno (16 px sopra, 8 px sotto: ritmo invariato rispetto a prima), quindi
+    non ruba più spazio al chip.
+  - **`lib/main.dart`**: il `Container` del chip non ha padding orizzontale
+    `AppSpacing.spaceMd` (16 px) ma `AppSpacing.gutter` (12 px); il padding
+    verticale resta `AppSpacing.spaceSm` (8 px). Nessuna larghezza, altezza o
+    `constraints` fissa: la larghezza arriva solo dal `Row` interno con
+    `MainAxisSize.min`, quindi il chip si dimensiona sulla lunghezza della scritta
+    (chip alto 38 px, label non più troncata).
+  - **`lib/theme/app_theme.dart`**: allineato anche `chipTheme.padding` a
+    12 px orizzontali / 8 px verticali, così i `Chip` Material e i chip
+    hand-built non divergono.
+
+- Test:
+  - **`test/documents_ui_test.dart`**: nuovo group `Geometria chip filtri` (6
+    test) — altezza resa del chip ≥ testo + `2 × paddingV` + bordo, label e
+    contatori senza overflow di righe, padding orizzontale di 12 px con larghezza
+    proporzionale alla label ("Preventivi" più largo di "Bozze"), spaziatura
+    verticale 16 px sopra / 8 px sotto invariata, nessun errore di layout a
+    320×640 con testo al 130% (chip ancora raggiungibile con lo swipe
+    orizzontale) e nessuna dimensione rigida nel widget del chip. I 5 test
+    funzionali di `Filtri chip` restano invariati.
+
+## [1.8.1] - 2026-10-10
+
+### Fixed
+
+- **Grafiche dei pulsanti non uniformi** (issue "pulsanti segnati in verde"):
+  ogni schermata ridefiniva a mano raggio, altezza, padding e area di tap, con
+  risultati diversi a ogni schermata.
+  - **`lib/theme/app_theme.dart`**: nuova classe di token `AppButtons` con la
+    geometria condivisa (`minHeight` 40, `radius` `AppRadii.xl`, `padding`
+    `AppSpacing.spaceMd`/`spaceSm`, `textStyle` `AppTextStyles.labelLg`, `shape`
+    `RoundedRectangleBorder`) e gli stili distruttivi `destructiveStyle` /
+    `destructiveOutlinedStyle`. I token sono applicati a `elevatedButtonTheme`,
+    `outlinedButtonTheme`, `textButtonTheme` e `floatingActionButtonTheme`.
+  - **`lib/theme/app_theme.dart`**: aggiunto il **`filledButtonTheme`** mancante.
+    I `FilledButton.icon` di `lib/documents/pdf_preview_screen.dart` restavano
+    sui default Material 3 (`StadiumBorder` a pillola) e risultavano
+    disuniformi dal `OutlinedButton.icon` affiancato nella stessa barra.
+  - **`floatingActionButtonTheme`**: impostato uno `shape` basato su
+    `AppRadii.full`; i due `FloatingActionButton.extended` di `lib/main.dart`
+    (tab Clienti e Catalogo) non usano più il raggio di default Material 3.
+  - **`lib/main.dart`**: i quattro pulsanti distruttivi "Elimina" (foglio di
+    dettaglio ordine e dialog di conferma di ordini, clienti e articoli) hanno
+    ora un unico aspetto — `AppColors.error` su `AppColors.onPrimary` — al posto
+    del precedente `errorContainer`/`onErrorContainer` nel solo foglio di
+    dettaglio; rimosse le `TextStyle(color: AppColors.onPrimary)` hardcoded
+    dalle label.
+  - **`lib/main.dart`**: il CTA "Salva Preventivo" non usa più
+    `padding: EdgeInsets.all(16)` e `fontSize: 16` hardcoded (altezza ~72 px
+    contro i 48 px degli altri pulsanti) ed è ora a larghezza piena come gli
+    altri CTA primary.
+  - **`lib/main.dart`**: la riga "Voci Preventivo" non va più in overflow a
+    320×640 e 360×640 — titolo e pulsanti "Catalogo" / "Personalizzata" erano
+    in una `Row` la cui somma delle larghezze naturali superava lo spazio
+    disponibile; ora il titolo sta sopra e i pulsanti sono in un `Wrap`.
+  - **`lib/main.dart`**: il CTA "Crea" del banner non usa più
+    `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap`, quindi ha la
+    stessa area di tap e la stessa altezza di tutti gli altri pulsanti
+    (conserva la `Key('documents-banner-cta')`).
+  - **`lib/main.dart`**: il bottone "Aggiorna" della barra di sync non usa più
+    `minimumSize: Size.zero` e `MaterialTapTargetSize.shrinkWrap` (era l'ultimo
+    pulsante dell'app con area di tap ridotta, 12 px di altezza contro i 48 px
+    degli altri). La barra ha perso il padding verticale, che serviva solo a
+    compensare l'altezza ridotta: la lista documenti non viene più schiacciata
+    fuori dal viewport su schermi 800×600.
+  - **`lib/main.dart`**: le righe dei totali in `OrderEditScreen`
+    ("Subtotale Imponibile", "Totale Imposte/IVA", "TOTALE COMPLESSIVO") non
+    vanno più in overflow su schermi stretti (le label da sole superavano i
+    296 px utili a 320 dp); i loro stili tipografici derivano dalla scala dei
+    token.
+  - **`lib/settings/brand_settings_screen.dart`**: "Rimuovi logo" e "Rimuovi"
+    (SMTP) usano lo stile distruttivo outlined, quindi anche il **bordo** passa
+    al token `error` invece di restare sul grigio neutro del tema (conservata la
+    `Key('settings-brand-logo-remove')`).
+
+- Test:
+  - **`test/button_graphics_test.dart`** (nuovo, 15 test): raggio/altezza/padding
+    identici fra "Chiudi" e "Condividi" in `DocumentPdfPreviewScreen`, label
+    centrate nei rispettivi bottoni, `filledButtonTheme` identico a
+    `elevatedButtonTheme`, raggio condiviso fra tutte le famiglie, FAB basato su
+    `AppRadii`, `OrderEditScreen` senza overflow a 320×640 e 360×640, label
+    "Catalogo"/"Personalizzata" non compresse, "Salva Preventivo" a larghezza
+    piena, "Elimina" con lo stesso `backgroundColor`/`foregroundColor` e senza
+    `TextStyle` hardcoded, nessun pulsante con `tapTargetSize` shrinkWrap e
+    bottone "Aggiorna" della barra di sync all'altezza standard.
+  - **`test/design_tokens_test.dart`**: asserzioni sui nuovi token `AppButtons` e
+    sulla geometria di `elevatedButtonTheme` / `filledButtonTheme` /
+    `outlinedButtonTheme` / `textButtonTheme` / `floatingActionButtonTheme`
+    (raggio `AppRadii.xl`, altezza minima condivisa, `AppTextStyles.labelLg`).
+
 ## [1.8.0] - 2026-10-10
 
 ### Added
 
-- **Inserimento vocale collegato alla ricerca del database**: il pulsante microfono
-  in `OrderEditScreen` ora risolve cliente e voci dettate usando le stesse predicate di
-  ricerca delle tab Clienti e Catalogo, invece del matching isolato precedente.
-  - `lib/utils/entity_search.dart`: modulo condiviso Dart puro (`normalizeSearchText`,
-    `searchClients` su nome/telefono/email, `searchCatalog` su nome/descrizione/UM e
-    `bestClientMatch`/`bestCatalogMatch` con ranking deterministico
-    esatto > prefisso > sottostringa, tie-break su nome più corto e lunghezza token,
-    utile con i 12.351 articoli del listino).
-  - Le tab Clienti (`_ClientsTabState.build`) e Catalogo (`_CatalogTabState.build`)
-    chiamano `searchClients`/`searchCatalog`: unica definizione di "cerca", stessa
-    UI, stesse `Key` e stessi testi.
-  - Il flusso vocale (`_applyVoiceDraft`) usa `bestClientMatch`/`bestCatalogMatch`:
-    a match esatto/parziale il cliente viene selezionato e le voci entrano nel
-    preventivo con `catalogItemId`, prezzo, IVA, UM e sconto ereditati dal catalogo
-    (nuovo factory `OrderItem.fromCatalog` in `lib/models/models.dart`).
-  - Le voci non risolte restano inserite come voce senza prezzo e generano l'avviso
-    `senza prezzo` nel messaggio `order-edit-voice-message`, come prima.
-  - **Foglio di selezione ricercabile** (`_SearchablePickSheet` in `lib/main.dart`)
-    precompilato col testo dettato quando cliente/articolo non è risolto o è ambiguo:
-    la scelta dell'utente completa l'inserimento del preventivo. Anche il picker
-    Catalogo esistente (`_showCatalogPicker`) ora ha il campo di ricerca
-    (`catalog-picker-search-field`).
-  - `AppSearchField` accetta un `controller` opzionale per precompilare la ricerca.
-- Test: `test/entity_search_test.dart` (normalizzazione accenti/case/spazi, ricerca
-  per campo, ranking `best*Match` e ambiguità), estensioni in `test/documents_ui_test.dart`
-  (picker Catalogo ricercabile e inserimento della voce con i dati del catalogo).
+- **Ricerca di articoli e clienti** potenziata in tutta l'app:
+  - Tab **Clienti**: il campo di ricerca filtra per nome, telefono, email,
+    **indirizzo** e **note** (case-insensitive, con `trim`); il pulsante **clear**
+    ripristina l'elenco completo e lo stato "nessun risultato per la ricerca" è
+    distinto da "nessun cliente in rubrica".
+  - Tab **Catalogo**: la ricerca filtra per nome, descrizione, unità di misura,
+    **divisa** e **sconto** (case-insensitive, con `trim`) e distingue lo stato
+    "nessun risultato" dal listino vuoto (~12.351 voci).
+  - **Picker catalogo** in `OrderEditScreen`: il bottom sheet ha un campo di
+    ricerca che filtra il listino in tempo reale (`catalog-picker-search-field`)
+    e permette di selezionare una voce con un tap.
+  - **Selettore cliente** in `OrderEditScreen`: campo "Cliente Selezionato"
+    ricercabile per nome/telefono/email (`client-picker-search-field`) che
+    aggiorna `_selectedClient` e il `clientId`/`clientName` del documento salvato.
+  - `AppSearchField` condiviso: `TextEditingController` opzionale e pulsante
+    **clear** (`Icons.close`, visibile solo a query non vuota).
 
 ## [1.7.0] - 2026-10-10
 
@@ -210,6 +351,44 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ### Changed
 
+- **Colore delle grafiche da taupe a beige chiaro** (`#9D8C7C` → `#D1C9BA`):
+  la palette primaria del design system passa al nuovo beige richiesto, senza
+  toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
+  - `lib/theme/app_theme.dart`: token `AppColors.primary` `#9D8C7C` → **#D1C9BA**.
+    `AppColors.primaryContainer` (`#6E6153`) e `AppColors.onPrimaryContainer`
+    (`#F1E7DD`) restano invariati (tonalità scura/chiara dello stesso hue caldo-neutro,
+    che garantiscono il contrasto del testo bianco su chip/badge/banner). Aggiornati i
+    doc comment. Il `ColorScheme` esplicito eredita automaticamente il nuovo token
+    (`primary`, `surfaceTint`).
+  - Contesto grafico aggiornato automaticamente (tutti passano dai token): banner in gradiente
+    `primaryContainer → primary`, carosello KPI (accento `primary`), chip di filtro selezionati,
+    pill di stato `Completato`, avatar del logo nell'AppBar Documenti, azioni primarie delle
+    card, totali, tabelle/intestazioni dei documenti PDF e bordo inferiore dell'header.
+  - Accessibilità: `onPrimary` resta bianco; `#D1C9BA` è molto luminoso, quindi il contrasto
+    con il testo bianco scende da ≈ **3.24:1** a ≈ **1.6:1** (sotto la soglia WCAG AA per
+    testo/componenti sopra il primario). La richiesta riguarda solo il colore delle grafiche;
+    un eventuale ribilanciamento di `onPrimary` è fuori scope. `primaryContainer` scuro
+    mantiene il testo bianco a ≈ **6.0:1** (WCAG AA testo normale).
+  - Test: `test/design_tokens_test.dart` aggiornato ai nuovi hex e
+    `test/brand_card_pdf_test.dart` alla barra primaria `0.81961 0.78824 0.72941 rg f`.
+- **Colore delle grafiche da ocra a taupe** (`#B8860B` → `#9D8C7C`):
+  la palette primaria del design system passa dal giallo ocra al taupe, senza
+  toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
+  - `lib/theme/app_theme.dart`: token `AppColors.primary` `#B8860B` → **#9D8C7C**,
+    `AppColors.primaryContainer` `#9A7400` → **#6E6153** e
+    `AppColors.onPrimaryContainer` `#FFE6AD` → **#F1E7DD** (tonalità più scura dello
+    stesso hue, per preservare il contrasto del testo bianco). Aggiornati i doc comment.
+    Il `ColorScheme` esplicito eredita i nuovi token (`primary`, `primaryContainer`,
+    `surfaceTint`).
+  - Contesto grafico aggiornato automaticamente (tutti passano dai token): banner in gradiente
+    `primaryContainer → primary`, carosello KPI (accento `primary`), chip di filtro selezionati,
+    pill di stato `Completato`, avatar del logo nell'AppBar Documenti, azioni primarie delle
+    card, totali, tabelle/intestazioni dei documenti PDF e bordo inferiore dell'header.
+  - Accessibilità: `onPrimary` resta bianco; il contrasto con `#9D8C7C` è ≈ **3.24:1**
+    (WCAG AA per testo grande e componenti UI/icone, in linea con l'ocra precedente);
+    `primaryContainer` scuro mantiene il testo bianco a ≈ **6.0:1** (WCAG AA testo normale).
+  - Test: `test/design_tokens_test.dart` aggiornato ai nuovi hex e
+    `test/brand_card_pdf_test.dart` alla barra primaria `0.61569 0.54902 0.48627 rg f`.
 - **Colore delle grafiche da blu a giallo ocra** (`#00288E` → `#B8860B` DarkGoldenRod):
   la palette primaria del design system passa dal blu istituzionale al giallo ocra, senza
   toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).

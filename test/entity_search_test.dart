@@ -60,6 +60,22 @@ void main() {
       expect(searchClients(clients, 'anna@example').single.id, 'c3');
     });
 
+    test('filtra per indirizzo', () {
+      final withAddress = <Client>[
+        Client(id: 'a1', name: 'Alfa Srl', address: 'Via Roma 10'),
+        Client(id: 'a2', name: 'Beta Snc'),
+      ];
+      expect(searchClients(withAddress, 'via roma').single.id, 'a1');
+    });
+
+    test('filtra per note', () {
+      final withNotes = <Client>[
+        Client(id: 'n1', name: 'Gamma', notes: 'Cliente storico'),
+        Client(id: 'n2', name: 'Delta'),
+      ];
+      expect(searchClients(withNotes, 'storico').single.id, 'n1');
+    });
+
     test('nessuna corrispondenza', () {
       expect(searchClients(clients, 'inesistente'), isEmpty);
     });
@@ -104,6 +120,24 @@ void main() {
       final byUm = searchCatalog(catalog, 'kg');
       expect(byUm, hasLength(2));
       expect(byUm.map((i) => i.id), containsAll(['p1', 'p2']));
+    });
+
+    test('filtra per divisa', () {
+      final items = <CatalogItem>[
+        const CatalogItem(
+            id: 'd1', name: 'Item USD', unitPrice: 1, currency: 'USD'),
+        const CatalogItem(id: 'd2', name: 'Item EUR', unitPrice: 1),
+      ];
+      expect(searchCatalog(items, 'usd').single.id, 'd1');
+    });
+
+    test('filtra per sconto', () {
+      final items = <CatalogItem>[
+        const CatalogItem(
+            id: 's1', name: 'Item', unitPrice: 1, discount: '30,00'),
+        const CatalogItem(id: 's2', name: 'Altro', unitPrice: 1),
+      ];
+      expect(searchCatalog(items, '30,00').single.id, 's1');
     });
 
     test('nessuna corrispondenza', () {

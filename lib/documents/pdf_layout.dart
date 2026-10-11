@@ -63,8 +63,7 @@ double ptToMm(double pt) => pt / PdfPageFormat.mm;
 
 /// Lati in pixel di un segmento lungo [mm] alla risoluzione [dpi]:
 /// 85 → 1004, 55 → 650, 25 → 295, 15 → 177 (tutti a 300 DPI).
-int pxAt300Dpi(double mm, [double dpi = printDpi]) =>
-    (mm / 25.4 * dpi).round();
+int pxAt300Dpi(double mm, [double dpi = printDpi]) => (mm / 25.4 * dpi).round();
 
 /// Dimensione in punti della risoluzione nativa di un'immagine [px] a [dpi].
 double pxToPt(double px, [double dpi = printDpi]) => px / dpi * 72;

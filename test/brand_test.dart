@@ -222,8 +222,7 @@ void main() {
     });
 
     test('un\'immagine esattamente al lato massimo resta invariata', () async {
-      final normalized =
-          await BrandLogoStore.normalize(_png(2048, 512));
+      final normalized = await BrandLogoStore.normalize(_png(2048, 512));
       final decoded = img.decodePng(normalized)!;
 
       expect(decoded.width, 2048);

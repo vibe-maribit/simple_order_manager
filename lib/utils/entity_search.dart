@@ -27,8 +27,8 @@ String _removeAccents(String value) {
   return buffer.toString();
 }
 
-/// Cerca i clienti per nome, telefono o email. Query vuota restituisce la
-/// lista invariata.
+/// Cerca i clienti per nome, telefono, email, indirizzo o note. Query vuota
+/// restituisce la lista invariata.
 List<Client> searchClients(List<Client> clients, String query) {
   final needle = normalizeSearchText(query);
   if (needle.isEmpty) return List<Client>.from(clients);
@@ -36,14 +36,18 @@ List<Client> searchClients(List<Client> clients, String query) {
     final name = normalizeSearchText(client.name);
     final phone = normalizeSearchText(client.phone);
     final email = normalizeSearchText(client.email);
+    final address = normalizeSearchText(client.address);
+    final notes = normalizeSearchText(client.notes);
     return name.contains(needle) ||
         phone.contains(needle) ||
-        email.contains(needle);
+        email.contains(needle) ||
+        address.contains(needle) ||
+        notes.contains(needle);
   }).toList();
 }
 
-/// Cerca le voci di catalogo per nome, descrizione o unità di misura. Query
-/// vuota restituisce la lista invariata.
+/// Cerca le voci di catalogo per nome, descrizione, unità di misura, valuta
+/// o sconto. Query vuota restituisce la lista invariata.
 List<CatalogItem> searchCatalog(List<CatalogItem> items, String query) {
   final needle = normalizeSearchText(query);
   if (needle.isEmpty) return List<CatalogItem>.from(items);
@@ -51,9 +55,13 @@ List<CatalogItem> searchCatalog(List<CatalogItem> items, String query) {
     final name = normalizeSearchText(item.name);
     final description = normalizeSearchText(item.description);
     final um = normalizeSearchText(item.unitOfMeasure);
+    final currency = normalizeSearchText(item.currency);
+    final discount = normalizeSearchText(item.discount);
     return name.contains(needle) ||
         description.contains(needle) ||
-        um.contains(needle);
+        um.contains(needle) ||
+        currency.contains(needle) ||
+        discount.contains(needle);
   }).toList();
 }
 

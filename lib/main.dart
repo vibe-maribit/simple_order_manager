@@ -1543,10 +1543,12 @@ class _OrdersTabState extends State<OrdersTab> {
     return Container(
       width: double.infinity,
       color: AppColors.surfaceContainerHigh,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.margin,
-        vertical: AppSpacing.spaceSm,
-      ),
+      // Nessun padding verticale: è il bottone "Aggiorna", ora all'altezza
+      // standard di ogni altro pulsante (48 px con area di tap piena), a
+      // dettare l'altezza della barra. Con il vecchio `shrinkWrap` il padding
+      // serviva a compensare un bottone di 12 px e aggiungeva 36 px di
+      // altezza spingendo fuori dal viewport la lista documenti.
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.margin),
       child: Row(
         children: [
           Flexible(
@@ -1596,20 +1598,12 @@ class _OrdersTabState extends State<OrdersTab> {
               ),
             ),
           ),
+          // Nessuno `style:` a per-corpo: il bottone prende raggio, altezza,
+          // padding e area di tap da `textButtonTheme`, come tutti gli altri.
           TextButton(
             key: kSyncRefreshKey,
             onPressed: _syncNow,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.spaceSm,
-              ),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Aggiorna',
-              style: AppTextStyles.labelMd,
-            ),
+            child: const Text('Aggiorna'),
           ),
         ],
       ),
@@ -1819,21 +1813,13 @@ class _OrdersTabState extends State<OrdersTab> {
               key: kBannerCtaKey,
               onPressed: () => _openOrderEditor(null),
               style: ElevatedButton.styleFrom(
+                // Inversione bianco/ocra richiesta dal gradiente del banner:
+                // il resto della geometria arriva dal tema (stesso raggio,
+                // altezza e area di tap di ogni altro pulsante).
                 backgroundColor: AppColors.onPrimary,
                 foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.spaceMd,
-                  vertical: AppSpacing.spaceSm,
-                ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(
-                'Crea',
-                style: AppTextStyles.labelLg.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
+              child: const Text('Crea'),
             ),
           ],
         ),
@@ -1876,23 +1862,41 @@ class _OrdersTabState extends State<OrdersTab> {
     );
   }
 
+  /// Riga dei chip filtro.
+  ///
+  /// Nessuna altezza rigida: il vecchio `SizedBox(height: 48)` incorniciava la
+  /// `ListView` orizzontale e, con il padding verticale applicato *dentro* lo
+  /// scroll, lasciava al chip solo `48 - 16 - 8 = 24 px` — meno di quanto ne
+  /// servono a testo + padding + bordo, quindi le label ("Tutti",
+  /// "Preventivi"…) venivano tagliate. Qui l'altezza è derivata dal
+  /// contenuto (`IntrinsicHeight`), il padding verticale sta sul `Padding`
+  /// esterno e i chip si dimensionano sulla lunghezza della scritta.
   Widget _buildFilterChips() {
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.margin,
-          AppSpacing.spaceMd,
-          AppSpacing.margin,
-          AppSpacing.spaceSm,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.margin,
+        AppSpacing.spaceMd,
+        AppSpacing.margin,
+        AppSpacing.spaceSm,
+      ),
+      child: IntrinsicHeight(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (var index = 0;
+                  index < _DocumentFilter.values.length;
+                  index++) ...<Widget>[
+                if (index > 0) const SizedBox(width: AppSpacing.spaceSm),
+                _buildFilterChip(
+                  _DocumentFilter.values[index],
+                  _countFor(_DocumentFilter.values[index]),
+                ),
+              ],
+            ],
+          ),
         ),
-        itemCount: _DocumentFilter.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.spaceSm),
-        itemBuilder: (_, index) {
-          final filter = _DocumentFilter.values[index];
-          return _buildFilterChip(filter, _countFor(filter));
-        },
       ),
     );
   }
@@ -1916,7 +1920,7 @@ class _OrdersTabState extends State<OrdersTab> {
           onTap: () => _selectFilter(filter),
           child: Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.spaceMd,
+              horizontal: AppSpacing.gutter,
               vertical: AppSpacing.spaceSm,
             ),
             decoration: BoxDecoration(
@@ -2234,7 +2238,7 @@ class _OrdersTabState extends State<OrdersTab> {
         borderRadius: BorderRadius.circular(AppRadii.xl),
         onTap: onPressed,
         child: Container(
-          height: 40,
+          height: AppButtons.minHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceSm),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.xl),
@@ -2548,10 +2552,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.errorContainer,
-                          foregroundColor: AppColors.onErrorContainer,
-                        ),
+                        style: AppButtons.destructiveStyle,
                         icon: const Icon(Icons.delete),
                         label: const Text('Elimina'),
                         onPressed: () {
@@ -2584,13 +2585,12 @@ class _OrdersTabState extends State<OrdersTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteOrder(order.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),
@@ -2662,6 +2662,9 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   late List<OrderItem> _items;
   final TextEditingController _notesController = TextEditingController();
 
+  /// Mostra il nome del cliente selezionato nel campo di sola lettura.
+  final TextEditingController _clientController = TextEditingController();
+
   /// Copia locale della configurazione AI: il fallback del modello deprecato
   /// la aggiorna a runtime senza che questa rotta debba essere ricostruita.
   late AiConfig _aiConfig;
@@ -2710,6 +2713,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       _status = OrderStatus.bozza;
       _items = [];
     }
+    _clientController.text = _selectedClient.name;
   }
 
   @override
@@ -2719,6 +2723,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     }
     _recorder.dispose().ignore();
     _notesController.dispose();
+    _clientController.dispose();
     super.dispose();
   }
 
@@ -3011,7 +3016,10 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               : null;
       if (!mounted) return;
       if (resolved != null) {
-        setState(() => _selectedClient = resolved);
+        setState(() {
+          _selectedClient = resolved;
+          _clientController.text = resolved.name;
+        });
         clientMatched = true;
       }
     }
@@ -3270,22 +3278,17 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<Client>(
-                    value: _selectedClient,
+                  TextFormField(
+                    key: const Key('client-picker-field'),
+                    readOnly: true,
+                    controller: _clientController,
                     decoration: const InputDecoration(
                       labelText: 'Cliente Selezionato',
                       prefixIcon: Icon(Icons.person),
                       border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.search),
                     ),
-                    items: widget.clients
-                        .map(
-                          (c) =>
-                              DropdownMenuItem(value: c, child: Text(c.name)),
-                        )
-                        .toList(),
-                    onChanged: (c) {
-                      if (c != null) setState(() => _selectedClient = c);
-                    },
+                    onTap: _showClientPicker,
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -3301,29 +3304,38 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Items title & add buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Intestazione delle voci: il titolo occupa la riga superiore e i
+          // due pulsanti quella sotto. Con il layout precedente (titolo e
+          // pulsanti affiancati nella stessa `Row`) la somma delle larghezze
+          // naturali superava i 288 px disponibili a 320 dp — anche a 360 dp
+          // — e la `Row` andava in overflow.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Voci Preventivo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                style: AppTextStyles.headlineSm.copyWith(
                   color: AppColors.onSurface,
                 ),
               ),
-              Row(
+              const SizedBox(height: AppSpacing.gutter),
+              // `Wrap` e non `Row`: i pulsanti restano alla loro larghezza
+              // naturale (nessuna label troncata) e vanno in riga successiva
+              // su viewport più stretti.
+              Wrap(
+                spacing: AppSpacing.gutter,
+                runSpacing: AppSpacing.spaceXs,
                 children: [
                   OutlinedButton.icon(
+                    key: const Key('order-items-catalog'),
                     onPressed: _showCatalogPicker,
-                    icon: const Icon(Icons.inventory, size: 16),
+                    icon: const Icon(Icons.inventory),
                     label: const Text('Catalogo'),
                   ),
-                  const SizedBox(width: 8),
                   ElevatedButton.icon(
+                    key: const Key('order-items-custom'),
                     onPressed: _addCustomItem,
-                    icon: const Icon(Icons.add, size: 16),
+                    icon: const Icon(Icons.add),
                     label: const Text('Personalizzata'),
                   ),
                 ],
@@ -3438,10 +3450,20 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
               padding: const EdgeInsets.all(AppSpacing.spaceMd),
               child: Column(
                 children: [
+                  // Le label delle righe totali sono più larghe del contenuto
+                  // disponibile a 320/360 dp ("Subtotale Imponibile:" da sola
+                  // misura ~299 px su 296 px utili): senza `Expanded` + ellipsis
+                  // la `Row` andava in overflow.
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Subtotale Imponibile:'),
+                      const Expanded(
+                        child: Text(
+                          'Subtotale Imponibile:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         '€ ${_subtotal.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -3450,9 +3472,15 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   ),
                   const SizedBox(height: 6),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Totale Imposte/IVA:'),
+                      const Expanded(
+                        child: Text(
+                          'Totale Imposte/IVA:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         '€ ${_taxTotal.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
@@ -3461,21 +3489,21 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                   ),
                   const Divider(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'TOTALE COMPLESSIVO:',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
+                      Expanded(
+                        child: Text(
+                          'TOTALE COMPLESSIVO:',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.headlineSm.copyWith(
+                            color: AppColors.onSurface,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: AppSpacing.spaceSm),
                       Text(
                         formatEuro(_grandTotal),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyles.currencyCard.copyWith(
                           color: AppColors.primary,
                         ),
                       ),
@@ -3486,18 +3514,17 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
+          // CTA a larghezza pulla come gli altri primary: il padding
+          // `EdgeInsets.all(16)` e il `fontSize: 16` hardcoded producevano
+          // un'altezza (~56 px) e un raggio diversi da tutti i pulsanti.
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              key: const Key('order-edit-save-cta'),
+              icon: const Icon(Icons.save),
+              label: const Text('Salva Preventivo'),
+              onPressed: _saveOrder,
             ),
-            icon: const Icon(Icons.save),
-            label: const Text(
-              'Salva Preventivo',
-              style: TextStyle(fontSize: 16),
-            ),
-            onPressed: _saveOrder,
           ),
         ],
       ),
@@ -3533,9 +3560,100 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
           if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
           if (cat.description.isNotEmpty) cat.description,
         ].join(' · '),
+        emptyText: 'Nessun articolo trovato per la ricerca',
         onSelected: (cat) {
           _addItemFromCatalog(cat);
           Navigator.pop(sheetContext);
+        },
+      ),
+    );
+  }
+
+  void _showClientPicker() {
+    if (widget.clients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Non ci sono clienti in rubrica.'),
+        ),
+      );
+      return;
+    }
+    var query = '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final q = query.trim().toLowerCase();
+          final filtered = widget.clients.where((c) {
+            if (q.isEmpty) return true;
+            return c.name.toLowerCase().contains(q) ||
+                c.phone.toLowerCase().contains(q) ||
+                c.email.toLowerCase().contains(q);
+          }).toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: AppSearchField(
+                    key: const Key('client-picker-search-field'),
+                    hintText: 'Cerca cliente per nome, telefono, email...',
+                    onChanged: (value) => setModalState(() => query = value),
+                  ),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child:
+                                Text('Nessun cliente trovato per la ricerca'),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final client = filtered[i];
+                            final selected = client.id == _selectedClient.id;
+                            return ListTile(
+                              leading: CircleAvatar(
+                                child: Text(
+                                  client.name.isEmpty
+                                      ? '?'
+                                      : client.name
+                                          .substring(0, 1)
+                                          .toUpperCase(),
+                                ),
+                              ),
+                              title: Text(client.name),
+                              subtitle: Text(
+                                [client.phone, client.email]
+                                    .where((e) => e.isNotEmpty)
+                                    .join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: selected
+                                  ? const Icon(Icons.check,
+                                      color: AppColors.primary)
+                                  : null,
+                              onTap: () {
+                                setState(() {
+                                  _selectedClient = client;
+                                  _clientController.text = client.name;
+                                });
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
         },
       ),
     );
@@ -3555,6 +3673,7 @@ class _SearchablePickSheet<T> extends StatefulWidget {
   final String Function(T) itemTitle;
   final String Function(T) itemSubtitle;
   final ValueChanged<T> onSelected;
+  final String emptyText;
 
   const _SearchablePickSheet({
     required this.title,
@@ -3566,6 +3685,7 @@ class _SearchablePickSheet<T> extends StatefulWidget {
     required this.itemTitle,
     required this.itemSubtitle,
     required this.onSelected,
+    this.emptyText = 'Nessun risultato per la ricerca.',
   });
 
   @override
@@ -3658,9 +3778,9 @@ class _SearchablePickSheetState<T> extends State<_SearchablePickSheet<T>> {
               ),
             ),
             if (results.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Nessun risultato per la ricerca.'),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(widget.emptyText),
               ),
           ],
         ),
@@ -3691,10 +3811,14 @@ class ClientsTab extends StatefulWidget {
 ///
 /// Usa i token del design system: riempimento `surfaceContainerLowest` e
 /// raggio [AppRadii.xl].
-InputDecoration appSearchFieldDecoration(String hintText) {
+InputDecoration appSearchFieldDecoration(
+  String hintText, {
+  Widget? suffixIcon,
+}) {
   return InputDecoration(
     hintText: hintText,
     prefixIcon: const Icon(Icons.search, size: 20),
+    suffixIcon: suffixIcon,
     filled: true,
     fillColor: AppColors.surfaceContainerLowest,
     contentPadding: const EdgeInsets.symmetric(
@@ -3720,7 +3844,7 @@ InputDecoration appSearchFieldDecoration(String hintText) {
 ///
 /// Aggiunge all'input l'ombra leggera prevista dal design system: colore
 /// derivato da `onSurface` all'8%, raggio [AppRadii.xl].
-class AppSearchField extends StatelessWidget {
+class AppSearchField extends StatefulWidget {
   const AppSearchField({
     super.key,
     required this.hintText,
@@ -3730,13 +3854,33 @@ class AppSearchField extends StatelessWidget {
 
   final String hintText;
   final ValueChanged<String>? onChanged;
-
-  /// Controller opzionale: i fogli di selezione vocale lo usano per
-  /// precompilare il campo col testo dettato.
   final TextEditingController? controller;
 
   @override
+  State<AppSearchField> createState() => _AppSearchFieldState();
+}
+
+class _AppSearchFieldState extends State<AppSearchField> {
+  late final TextEditingController _controller =
+      widget.controller ?? TextEditingController();
+
+  @override
+  void dispose() {
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _clear() {
+    _controller.clear();
+    widget.onChanged?.call('');
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final query = _controller.text;
     return DecoratedBox(
       decoration: const BoxDecoration(
         borderRadius: BorderRadius.all(Radius.circular(AppRadii.xl)),
@@ -3749,10 +3893,23 @@ class AppSearchField extends StatelessWidget {
         ],
       ),
       child: TextField(
-        controller: controller,
+        controller: _controller,
+        onChanged: (val) {
+          widget.onChanged?.call(val);
+          setState(() {});
+        },
         style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
-        decoration: appSearchFieldDecoration(hintText),
-        onChanged: onChanged,
+        decoration: appSearchFieldDecoration(
+          widget.hintText,
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  key: const Key('app-search-field-clear'),
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Cancella ricerca',
+                  onPressed: _clear,
+                ),
+        ),
       ),
     );
   }
@@ -3779,6 +3936,7 @@ class _ClientsTabState extends State<ClientsTab> {
               vertical: AppSpacing.spaceSm,
             ),
             child: AppSearchField(
+              key: const Key('clients-search-field'),
               hintText: 'Cerca cliente per nome, telefono, email...',
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
@@ -3793,19 +3951,21 @@ class _ClientsTabState extends State<ClientsTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.person_off_outlined,
                     size: 64,
                     color: AppColors.outline,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Nessun cliente trovato',
-                    style: TextStyle(
+                    widget.clients.isEmpty
+                        ? 'Nessun cliente in rubrica'
+                        : 'Nessun cliente trovato per la ricerca',
+                    style: const TextStyle(
                       fontSize: 16,
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -4049,13 +4209,12 @@ class _ClientsTabState extends State<ClientsTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteClient(client.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),
@@ -4118,19 +4277,21 @@ class _CatalogTabState extends State<CatalogTab> {
         ],
       ),
       body: filtered.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.inventory_2_outlined,
                     size: 64,
                     color: AppColors.outline,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Nessun articolo a listino',
-                    style: TextStyle(
+                    widget.catalog.isEmpty
+                        ? 'Nessun articolo a listino'
+                        : 'Nessun articolo trovato per la ricerca',
+                    style: const TextStyle(
                       fontSize: 16,
                       color: AppColors.onSurfaceVariant,
                     ),
@@ -4444,13 +4605,12 @@ class _CatalogTabState extends State<CatalogTab> {
             child: const Text('Annulla'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: AppButtons.destructiveStyle,
             onPressed: () {
               Navigator.pop(ctx);
               widget.onDeleteItem(item.id);
             },
-            child: const Text('Elimina',
-                style: TextStyle(color: AppColors.onPrimary)),
+            child: const Text('Elimina'),
           ),
         ],
       ),

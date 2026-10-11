@@ -234,7 +234,9 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                   hint: 'https://googleapis.com',
                   icon: Icons.dns_outlined,
                   keyboardType: TextInputType.url,
-                  inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s'))
+                  ],
                   errorText: _draft.apiBaseUrl.trim().isEmpty ||
                           _draft.apiBaseUrl.contains(' ')
                       ? 'Endpoint non valido: usa un URL senza spazi.'
@@ -251,9 +253,8 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                   obscureText: _obscureApiKey,
                   suffix: IconButton(
                     key: const Key('settings-ai-apikey-toggle'),
-                    tooltip: _obscureApiKey
-                        ? 'Mostra chiave'
-                        : 'Nascondi chiave',
+                    tooltip:
+                        _obscureApiKey ? 'Mostra chiave' : 'Nascondi chiave',
                     icon: Icon(
                       _obscureApiKey
                           ? Icons.visibility_off_outlined
@@ -295,8 +296,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.sync_alt, size: 18),
                     label: Text(
@@ -319,7 +319,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                   const SizedBox(height: AppSpacing.spaceSm),
                   Text(
                     'Elenco modelli non ancora letto: "Sincronizza modelli" '
-                        'chiama GET {endpoint}/models con la tua chiave.',
+                    'chiama GET {endpoint}/models con la tua chiave.',
                     style: AppTextStyles.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
