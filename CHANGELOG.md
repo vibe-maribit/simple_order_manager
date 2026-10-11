@@ -314,6 +314,26 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ### Changed
 
+- **Colore delle grafiche da taupe a beige chiaro** (`#9D8C7C` → `#D1C9BA`):
+  la palette primaria del design system passa al nuovo beige richiesto, senza
+  toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
+  - `lib/theme/app_theme.dart`: token `AppColors.primary` `#9D8C7C` → **#D1C9BA**.
+    `AppColors.primaryContainer` (`#6E6153`) e `AppColors.onPrimaryContainer`
+    (`#F1E7DD`) restano invariati (tonalità scura/chiara dello stesso hue caldo-neutro,
+    che garantiscono il contrasto del testo bianco su chip/badge/banner). Aggiornati i
+    doc comment. Il `ColorScheme` esplicito eredita automaticamente il nuovo token
+    (`primary`, `surfaceTint`).
+  - Contesto grafico aggiornato automaticamente (tutti passano dai token): banner in gradiente
+    `primaryContainer → primary`, carosello KPI (accento `primary`), chip di filtro selezionati,
+    pill di stato `Completato`, avatar del logo nell'AppBar Documenti, azioni primarie delle
+    card, totali, tabelle/intestazioni dei documenti PDF e bordo inferiore dell'header.
+  - Accessibilità: `onPrimary` resta bianco; `#D1C9BA` è molto luminoso, quindi il contrasto
+    con il testo bianco scende da ≈ **3.24:1** a ≈ **1.6:1** (sotto la soglia WCAG AA per
+    testo/componenti sopra il primario). La richiesta riguarda solo il colore delle grafiche;
+    un eventuale ribilanciamento di `onPrimary` è fuori scope. `primaryContainer` scuro
+    mantiene il testo bianco a ≈ **6.0:1** (WCAG AA testo normale).
+  - Test: `test/design_tokens_test.dart` aggiornato ai nuovi hex e
+    `test/brand_card_pdf_test.dart` alla barra primaria `0.81961 0.78824 0.72941 rg f`.
 - **Colore delle grafiche da ocra a taupe** (`#B8860B` → `#9D8C7C`):
   la palette primaria del design system passa dal giallo ocra al taupe, senza
   toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
