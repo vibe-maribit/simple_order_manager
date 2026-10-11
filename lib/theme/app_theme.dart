@@ -17,21 +17,22 @@ import 'package:flutter/material.dart';
 /// esplicito tramite [AppColors.scheme]: la UI non usa più
 /// `ColorScheme.fromSeed`, quindi i valori restano stabili nel tempo.
 abstract final class AppColors {
-  /// #B8860B — giallo ocra (DarkGoldenRod), colore delle grafiche: usato per
-  /// CTA, totali, gradienti, barre e intestazioni dei documenti PDF. Passa
-  /// WCAG AA con `onPrimary` per testo grande/icone (contrasto ≈ 3.25:1).
-  static const Color primary = Color(0xFFB8860B);
+  /// #9D8C7C — taupe, colore delle grafiche: usato per CTA, totali,
+  /// gradienti, barre e intestazioni dei documenti PDF. Passa WCAG AA con
+  /// `onPrimary` per testo grande/icone (contrasto ≈ 3.24:1).
+  static const Color primary = Color(0xFF9D8C7C);
 
-  /// #9A7400 — ocra scuro, contenitore del primario (chip attivi, badge,
-  /// banner): mantiene il testo bianco leggibile (contrasto ≈ 4.31:1).
-  static const Color primaryContainer = Color(0xFF9A7400);
+  /// #6E6153 — taupe scuro (stesso hue del primario), contenitore del
+  /// primario (chip attivi, badge, banner): mantiene il testo bianco
+  /// leggibile (contrasto ≈ 6.0:1).
+  static const Color primaryContainer = Color(0xFF6E6153);
 
   /// #FFFFFF — testo sopra [primary]/[primaryContainer].
   static const Color onPrimary = Color(0xFFFFFFFF);
 
-  /// #FFE6AD — oro chiaro, testo/icone sopra [primaryContainer] nel tema
+  /// #F1E7DD — beige chiaro, testo/icone sopra [primaryContainer] nel tema
   /// scuro (badge SVG delle impostazioni).
-  static const Color onPrimaryContainer = Color(0xFFFFE6AD);
+  static const Color onPrimaryContainer = Color(0xFFF1E7DD);
 
   /// #006A61 — accento secondario (azioni di conferma).
   static const Color secondary = Color(0xFF006A61);
