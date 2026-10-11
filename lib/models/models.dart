@@ -195,6 +195,27 @@ class OrderItem {
   double get taxAmount => subtotal * (taxRate / 100);
   double get total => subtotal + taxAmount;
 
+  /// Costruisce la voce a partire da un articolo di catalogo, ereditando
+  /// prezzo, IVA, UM e sconto. Usata dall'inserimento dal catalogo e dal
+  /// flusso vocale per non duplicare la mappatura dei campi.
+  factory OrderItem.fromCatalog(
+    CatalogItem catalog, {
+    required String id,
+    double quantity = 1.0,
+  }) {
+    return OrderItem(
+      id: id,
+      catalogItemId: catalog.id,
+      name: catalog.name,
+      description: catalog.description,
+      unitOfMeasure: catalog.unitOfMeasure,
+      discount: catalog.discount,
+      unitPrice: catalog.unitPrice,
+      taxRate: catalog.taxRate,
+      quantity: quantity,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'catalogItemId': catalogItemId,

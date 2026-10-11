@@ -17,6 +17,7 @@ import 'package:simple_order_manager/settings/ai_settings_screen.dart';
 import 'package:simple_order_manager/settings/brand_header.dart';
 import 'package:simple_order_manager/settings/brand_settings_screen.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
+import 'package:simple_order_manager/utils/entity_search.dart';
 import 'package:simple_order_manager/utils/format.dart';
 import 'package:simple_order_manager/version.dart';
 
@@ -2741,16 +2742,9 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
   void _addItemFromCatalog(CatalogItem cat) {
     setState(() {
       _items.add(
-        OrderItem(
+        OrderItem.fromCatalog(
+          cat,
           id: DateTime.now().millisecondsSinceEpoch.toString(),
-          catalogItemId: cat.id,
-          name: cat.name,
-          description: cat.description,
-          unitOfMeasure: cat.unitOfMeasure,
-          discount: cat.discount,
-          unitPrice: cat.unitPrice,
-          taxRate: cat.taxRate,
-          quantity: 1.0,
         ),
       );
     });
@@ -2977,7 +2971,7 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
         audioFile: audioFile,
       );
       if (!mounted) return;
-      _applyVoiceDraft(draft);
+      await applyVoiceDraft(draft);
     } on GeminiSttException catch (error) {
       if (!mounted) return;
       _showVoiceMessage(error.message, error: true);
@@ -3002,15 +2996,29 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
 
   /// Compila la scheda con la bozza estratta: cliente (match sull'anagrafica)
   /// e voci (match sul catalogo per ereditare prezzi e tasse).
-  void _applyVoiceDraft(VoiceOrderDraft draft) {
+  ///
+  /// Il matching usa le predicate condivise con le tab Clienti/Catalogo
+  /// ([bestClientMatch], [bestCatalogMatch]). Quando una citazione non è
+  /// risolta o è ambigua viene aperto un foglio di selezione ricercabile
+  /// precompilato col testo dettato: la scelta dell'utente risolve la voce.
+  @visibleForTesting
+  Future<void> applyVoiceDraft(VoiceOrderDraft draft) async {
     var clientMatched = false;
     final requestedClient = draft.customerName.trim();
     if (requestedClient.isNotEmpty) {
-      final match = _matchClientByName(requestedClient);
-      if (match != null) {
+      final match = bestClientMatch(widget.clients, requestedClient);
+      final ambiguous =
+          hasAmbiguousClientMatch(widget.clients, requestedClient);
+      final resolved = match != null && !ambiguous
+          ? match
+          : mounted
+              ? await _showClientPickSheet(requestedClient)
+              : null;
+      if (!mounted) return;
+      if (resolved != null) {
         setState(() {
-          _selectedClient = match;
-          _clientController.text = match.name;
+          _selectedClient = resolved;
+          _clientController.text = resolved.name;
         });
         clientMatched = true;
       }
@@ -3018,28 +3026,43 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
 
     final unmatched = <String>[];
     var seq = 0;
-    setState(() {
-      for (final line in draft.lines) {
-        final name = line.productName.trim();
-        if (name.isEmpty) continue;
-        seq += 1;
-        final catalogMatch = _findCatalogItem(name);
-        _items.add(
-          OrderItem(
-            id: '${DateTime.now().microsecondsSinceEpoch}_$seq',
-            catalogItemId: catalogMatch?.id ?? '',
-            name: catalogMatch?.name ?? name,
-            description: catalogMatch?.description ?? '',
-            unitOfMeasure: catalogMatch?.unitOfMeasure ?? '',
-            discount: catalogMatch?.discount ?? '',
-            unitPrice: catalogMatch?.unitPrice ?? 0.0,
-            taxRate: catalogMatch?.taxRate ?? 22.0,
-            quantity: line.quantity,
-          ),
-        );
-        if (catalogMatch == null) unmatched.add(name);
-      }
-    });
+    final resolvedItems = <OrderItem>[];
+    for (final line in draft.lines) {
+      final name = line.productName.trim();
+      if (name.isEmpty) continue;
+      seq += 1;
+      final match = bestCatalogMatch(widget.catalog, name);
+      final ambiguous = hasAmbiguousCatalogMatch(widget.catalog, name);
+      final catalogMatch = match != null && !ambiguous
+          ? match
+          : mounted
+              ? await _showCatalogPickSheet(name)
+              : null;
+      if (!mounted) return;
+      final id = '${DateTime.now().microsecondsSinceEpoch}_$seq';
+      resolvedItems.add(
+        catalogMatch != null
+            ? OrderItem.fromCatalog(
+                catalogMatch,
+                id: id,
+                quantity: line.quantity,
+              )
+            : OrderItem(
+                id: id,
+                catalogItemId: '',
+                name: name,
+                description: '',
+                unitOfMeasure: '',
+                discount: '',
+                unitPrice: 0.0,
+                taxRate: 22.0,
+                quantity: line.quantity,
+              ),
+      );
+      if (catalogMatch == null) unmatched.add(name);
+    }
+    if (!mounted) return;
+    setState(() => _items.addAll(resolvedItems));
 
     final notes = StringBuffer();
     notes.write('Da audio: ');
@@ -3062,41 +3085,51 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     );
   }
 
-  /// Match del cliente citato: esatto, poi parziale, su nome minuscolo.
-  Client? _matchClientByName(String name) {
-    final needle = _normalizeVoiceName(name);
-    Client? partial;
-    for (final client in widget.clients) {
-      final candidate = _normalizeVoiceName(client.name);
-      if (candidate == needle) return client;
-      if (partial == null &&
-          (candidate.contains(needle) || needle.contains(candidate))) {
-        partial = client;
-      }
-    }
-    return partial;
+  /// Foglio di selezione ricercabile per il cliente citato dalla voce.
+  Future<Client?> _showClientPickSheet(String prefill) {
+    return showModalBottomSheet<Client>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _SearchablePickSheet<Client>(
+        title: 'Seleziona cliente',
+        hintText: 'Cerca per nome, telefono o email',
+        searchFieldKey: const Key('order-edit-client-pick-search'),
+        initialQuery: prefill,
+        items: widget.clients,
+        search: searchClients,
+        itemTitle: (client) => client.name,
+        itemSubtitle: (client) => [
+          if (client.phone.isNotEmpty) client.phone,
+          if (client.email.isNotEmpty) client.email,
+        ].join(' · '),
+        onSelected: (client) => Navigator.pop(sheetContext, client),
+      ),
+    );
   }
 
-  /// Match del prodotto dettato nel catalogo: esatto, poi parziale, su nome
-  /// minuscolo normalizzato.
-  CatalogItem? _findCatalogItem(String productName) {
-    final needle = _normalizeVoiceName(productName);
-    if (needle.isEmpty) return null;
-    CatalogItem? partial;
-    for (final item in widget.catalog) {
-      final candidate = _normalizeVoiceName(item.name);
-      if (candidate == needle) return item;
-      if (partial == null &&
-          (candidate.contains(needle) || needle.contains(candidate))) {
-        partial = item;
-      }
-    }
-    return partial;
+  /// Foglio di selezione ricercabile per l'articolo citato dalla voce.
+  Future<CatalogItem?> _showCatalogPickSheet(String prefill) {
+    return showModalBottomSheet<CatalogItem>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _SearchablePickSheet<CatalogItem>(
+        title: 'Seleziona articolo',
+        hintText: 'Cerca per nome, descrizione o UM',
+        searchFieldKey: const Key('order-edit-item-pick-search'),
+        initialQuery: prefill,
+        items: widget.catalog,
+        search: searchCatalog,
+        itemTitle: (item) => item.name,
+        itemSubtitle: (item) => [
+          '${formatEuro(item.unitPrice)} (IVA ${item.taxRate.toStringAsFixed(0)}%)',
+          if (item.unitOfMeasure.isNotEmpty) 'UM ${item.unitOfMeasure}',
+          if (item.discount.isNotEmpty) 'Sconto ${item.discount}',
+          if (item.description.isNotEmpty) item.description,
+        ].join(' · '),
+        onSelected: (item) => Navigator.pop(sheetContext, item),
+      ),
+    );
   }
-
-  /// Minuscolo + spazi singoli: " panino   caldo " e "Panino Caldo" matchano.
-  static String _normalizeVoiceName(String value) =>
-      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   /// Apre la configurazione AI (endpoint, chiave, modelli) senza uscire dalla
   /// scheda del preventivo.
@@ -3510,81 +3543,27 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
       return;
     }
 
-    var query = '';
-    showModalBottomSheet(
+    showModalBottomSheet<CatalogItem>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          final q = query.trim().toLowerCase();
-          final filtered = widget.catalog.where((item) {
-            if (q.isEmpty) return true;
-            return item.name.toLowerCase().contains(q) ||
-                item.description.toLowerCase().contains(q) ||
-                item.unitOfMeasure.toLowerCase().contains(q) ||
-                item.currency.toLowerCase().contains(q) ||
-                item.discount.toLowerCase().contains(q);
-          }).toList();
-          return SizedBox(
-            height: MediaQuery.of(ctx).size.height * 0.8,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: AppSearchField(
-                    key: const Key('catalog-picker-search-field'),
-                    hintText: 'Cerca articolo...',
-                    onChanged: (value) => setModalState(() => query = value),
-                  ),
-                ),
-                Expanded(
-                  child: filtered.isEmpty
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child:
-                                Text('Nessun articolo trovato per la ricerca'),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: filtered.length,
-                          itemBuilder: (_, i) {
-                            final cat = filtered[i];
-                            return ListTile(
-                              title: Text(
-                                cat.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Text(
-                                [
-                                  '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
-                                  if (cat.unitOfMeasure.isNotEmpty)
-                                    'UM ${cat.unitOfMeasure}',
-                                  if (cat.discount.isNotEmpty)
-                                    'Sconto ${cat.discount}',
-                                  if (cat.description.isNotEmpty)
-                                    cat.description,
-                                ].join(' · '),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: ElevatedButton(
-                                key: const Key('catalog-picker-select'),
-                                onPressed: () {
-                                  _addItemFromCatalog(cat);
-                                  Navigator.pop(ctx);
-                                },
-                                child: const Text('Seleziona'),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          );
+      builder: (sheetContext) => _SearchablePickSheet<CatalogItem>(
+        title: 'Seleziona dal Catalogo',
+        hintText: 'Cerca per nome, descrizione o UM',
+        searchFieldKey: const Key('catalog-picker-search-field'),
+        initialQuery: '',
+        items: widget.catalog,
+        search: searchCatalog,
+        itemTitle: (cat) => cat.name,
+        itemSubtitle: (cat) => [
+          '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
+          if (cat.unitOfMeasure.isNotEmpty) 'UM ${cat.unitOfMeasure}',
+          if (cat.discount.isNotEmpty) 'Sconto ${cat.discount}',
+          if (cat.description.isNotEmpty) cat.description,
+        ].join(' · '),
+        emptyText: 'Nessun articolo trovato per la ricerca',
+        onSelected: (cat) {
+          _addItemFromCatalog(cat);
+          Navigator.pop(sheetContext);
         },
       ),
     );
@@ -3676,6 +3655,135 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Foglio di selezione ricercabile condiviso dal picker Catalogo e dal flusso
+/// vocale: campo [AppSearchField] precompilato col testo dettato e lista
+/// filtrata con le predicate condivise ([searchClients]/[searchCatalog]).
+class _SearchablePickSheet<T> extends StatefulWidget {
+  final String title;
+  final String hintText;
+  final Key searchFieldKey;
+  final String initialQuery;
+  final List<T> items;
+  final List<T> Function(List<T>, String) search;
+  final String Function(T) itemTitle;
+  final String Function(T) itemSubtitle;
+  final ValueChanged<T> onSelected;
+  final String emptyText;
+
+  const _SearchablePickSheet({
+    required this.title,
+    required this.hintText,
+    required this.searchFieldKey,
+    required this.initialQuery,
+    required this.items,
+    required this.search,
+    required this.itemTitle,
+    required this.itemSubtitle,
+    required this.onSelected,
+    this.emptyText = 'Nessun risultato per la ricerca.',
+  });
+
+  @override
+  State<_SearchablePickSheet<T>> createState() =>
+      _SearchablePickSheetState<T>();
+}
+
+class _SearchablePickSheetState<T> extends State<_SearchablePickSheet<T>> {
+  late String _query;
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.initialQuery;
+    _controller = TextEditingController(text: widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = widget.search(widget.items, _query);
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: AppTextStyles.headlineSm.copyWith(
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Chiudi',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: AppSearchField(
+                key: widget.searchFieldKey,
+                controller: _controller,
+                hintText: widget.hintText,
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.all(16),
+                itemCount: results.length,
+                itemBuilder: (_, i) {
+                  final item = results[i];
+                  return ListTile(
+                    key: Key('search-pick-item-$i'),
+                    title: Text(
+                      widget.itemTitle(item),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      widget.itemSubtitle(item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: ElevatedButton(
+                      onPressed: () => widget.onSelected(item),
+                      child: const Text('Seleziona'),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(widget.emptyText),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -3812,15 +3920,7 @@ class _ClientsTabState extends State<ClientsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final q = _searchQuery.trim().toLowerCase();
-    final filtered = widget.clients.where((c) {
-      if (q.isEmpty) return true;
-      return c.name.toLowerCase().contains(q) ||
-          c.phone.toLowerCase().contains(q) ||
-          c.email.toLowerCase().contains(q) ||
-          c.address.toLowerCase().contains(q) ||
-          c.notes.toLowerCase().contains(q);
-    }).toList();
+    final filtered = searchClients(widget.clients, _searchQuery);
 
     return Scaffold(
       appBar: AppBar(
@@ -4146,15 +4246,7 @@ class _CatalogTabState extends State<CatalogTab> {
 
   @override
   Widget build(BuildContext context) {
-    final q = _searchQuery.trim().toLowerCase();
-    final filtered = widget.catalog.where((item) {
-      if (q.isEmpty) return true;
-      return item.name.toLowerCase().contains(q) ||
-          item.description.toLowerCase().contains(q) ||
-          item.unitOfMeasure.toLowerCase().contains(q) ||
-          item.currency.toLowerCase().contains(q) ||
-          item.discount.toLowerCase().contains(q);
-    }).toList();
+    final filtered = searchCatalog(widget.catalog, _searchQuery);
 
     return Scaffold(
       appBar: AppBar(
