@@ -314,6 +314,24 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 
 ### Changed
 
+- **Colore delle grafiche da ocra a taupe** (`#B8860B` → `#9D8C7C`):
+  la palette primaria del design system passa dal giallo ocra al taupe, senza
+  toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
+  - `lib/theme/app_theme.dart`: token `AppColors.primary` `#B8860B` → **#9D8C7C**,
+    `AppColors.primaryContainer` `#9A7400` → **#6E6153** e
+    `AppColors.onPrimaryContainer` `#FFE6AD` → **#F1E7DD** (tonalità più scura dello
+    stesso hue, per preservare il contrasto del testo bianco). Aggiornati i doc comment.
+    Il `ColorScheme` esplicito eredita i nuovi token (`primary`, `primaryContainer`,
+    `surfaceTint`).
+  - Contesto grafico aggiornato automaticamente (tutti passano dai token): banner in gradiente
+    `primaryContainer → primary`, carosello KPI (accento `primary`), chip di filtro selezionati,
+    pill di stato `Completato`, avatar del logo nell'AppBar Documenti, azioni primarie delle
+    card, totali, tabelle/intestazioni dei documenti PDF e bordo inferiore dell'header.
+  - Accessibilità: `onPrimary` resta bianco; il contrasto con `#9D8C7C` è ≈ **3.24:1**
+    (WCAG AA per testo grande e componenti UI/icone, in linea con l'ocra precedente);
+    `primaryContainer` scuro mantiene il testo bianco a ≈ **6.0:1** (WCAG AA testo normale).
+  - Test: `test/design_tokens_test.dart` aggiornato ai nuovi hex e
+    `test/brand_card_pdf_test.dart` alla barra primaria `0.61569 0.54902 0.48627 rg f`.
 - **Colore delle grafiche da blu a giallo ocra** (`#00288E` → `#B8860B` DarkGoldenRod):
   la palette primaria del design system passa dal blu istituzionale al giallo ocra, senza
   toccare i colori semantici distinti (secondary teal, tertiary, error, superfici neutre).
