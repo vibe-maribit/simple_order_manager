@@ -17,10 +17,11 @@ import 'package:flutter/material.dart';
 /// esplicito tramite [AppColors.scheme]: la UI non usa più
 /// `ColorScheme.fromSeed`, quindi i valori restano stabili nel tempo.
 abstract final class AppColors {
-  /// #9D8C7C — taupe, colore delle grafiche: usato per CTA, totali,
-  /// gradienti, barre e intestazioni dei documenti PDF. Passa WCAG AA con
-  /// `onPrimary` per testo grande/icone (contrasto ≈ 3.24:1).
-  static const Color primary = Color(0xFF9D8C7C);
+  /// #D1C9BA — beige chiaro, colore delle grafiche: usato per CTA, totali,
+  /// gradienti, barre e intestazioni dei documenti PDF. Essendo molto
+  /// luminoso, il contrasto con `onPrimary` bianco è ≈ 1.6:1 (sotto la soglia
+  /// WCAG AA per testo/UI sopra il primario).
+  static const Color primary = Color(0xFFD1C9BA);
 
   /// #6E6153 — taupe scuro (stesso hue del primario), contenitore del
   /// primario (chip attivi, badge, banner): mantiene il testo bianco

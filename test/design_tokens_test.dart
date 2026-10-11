@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_order_manager/theme/app_theme.dart';
 
-/// Converte un `Color` nella stringa esadecimale della mockup (`0xFF9D8C7C`).
+/// Converte un `Color` nella stringa esadecimale della mockup (`0xFFD1C9BA`).
 String hex(Color color) {
   final argb = ((color.a * 255).round() << 24) |
       ((color.r * 255).round() << 16) |
@@ -16,7 +16,7 @@ String hex(Color color) {
 void main() {
   group('AppColors — palette della mockup', () {
     test('espone esattamente i valori hex del design system', () {
-      expect(hex(AppColors.primary), equals('0xFF9D8C7C'));
+      expect(hex(AppColors.primary), equals('0xFFD1C9BA'));
       expect(hex(AppColors.primaryContainer), equals('0xFF6E6153'));
       expect(hex(AppColors.onPrimary), equals('0xFFFFFFFF'));
       expect(hex(AppColors.onPrimaryContainer), equals('0xFFF1E7DD'));
@@ -105,12 +105,12 @@ void main() {
   });
 
   group('buildAppTheme()', () {
-    test('non usa ColorScheme.fromSeed e punta a #9D8C7C', () {
+    test('non usa ColorScheme.fromSeed e punta a #D1C9BA', () {
       final theme = AppTheme.light;
 
       expect(theme.useMaterial3, isTrue);
       expect(theme.colorScheme.primary, equals(AppColors.primary));
-      expect(hex(theme.colorScheme.primary), equals('0xFF9D8C7C'));
+      expect(hex(theme.colorScheme.primary), equals('0xFFD1C9BA'));
       expect(theme.scaffoldBackgroundColor, equals(AppColors.surface));
     });
 
@@ -299,7 +299,7 @@ void main() {
         ),
       );
 
-      expect(resolved.colorScheme.primary, equals(const Color(0xFF9D8C7C)));
+      expect(resolved.colorScheme.primary, equals(const Color(0xFFD1C9BA)));
       expect(
           resolved.colorScheme.primaryContainer,
           equals(
