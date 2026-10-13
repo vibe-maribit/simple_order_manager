@@ -65,7 +65,8 @@ void main() {
 
       final duroglass = byId['cat-1'];
       expect(duroglass, isNotNull);
-      expect(duroglass!['name'], equals('DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO'));
+      expect(duroglass!['name'],
+          equals('DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO'));
       expect(duroglass['unitOfMeasure'], equals('NR'));
       expect(duroglass['currency'], equals('E'));
       expect(duroglass['unitPrice'], equals(18.0));
@@ -254,6 +255,62 @@ void main() {
             .text,
         equals('37,00'),
       );
+    });
+  });
+
+  group('Migrazione catalogo', () {
+    // Una versione dell'asset diversa da quella corrente deve far ricaricare il
+    // listino incluso e riscrivere i dati salvati, così le installazioni già
+    // esistenti ottengono il nuovo catalogo (sostituzione effettiva).
+    test('versione vecchia ricarica dall\'asset e riscrive la versione',
+        () async {
+      const stale = CatalogItem(
+        id: 'cat-9999',
+        name: 'VOCE OBSOLETA DEL VECCHIO LISTINO',
+        unitOfMeasure: 'NR',
+        currency: 'E',
+        unitPrice: 1.0,
+        discount: '',
+        taxRate: 22.0,
+      );
+      SharedPreferences.setMockInitialValues({
+        'simple_orders_catalog_v1': jsonEncode([stale.toJson()]),
+        // Versione precedente (il vecchio listino da 12.351 voci).
+        'simple_orders_catalog_version_v1': 1,
+      });
+
+      final loaded = await StorageService.loadCatalog();
+
+      expect(
+        loaded.any((c) => c.name == 'VOCE OBSOLETA DEL VECCHIO LISTINO'),
+        isFalse,
+        reason: 'il catalogo obsoleto deve essere sostituito dall\'asset',
+      );
+      expect(loaded, isNotEmpty);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('simple_orders_catalog_version_v1'), equals(2));
+    });
+
+    test('versione corrente mantiene il catalogo salvato', () async {
+      const saved = CatalogItem(
+        id: 'cat-7',
+        name: 'VOCE SALVATA CORRENTE',
+        unitOfMeasure: 'NR',
+        currency: 'E',
+        unitPrice: 9.0,
+        discount: '',
+        taxRate: 22.0,
+      );
+      SharedPreferences.setMockInitialValues({
+        'simple_orders_catalog_v1': jsonEncode([saved.toJson()]),
+        'simple_orders_catalog_version_v1': 2,
+      });
+
+      final loaded = await StorageService.loadCatalog();
+
+      expect(loaded.length, equals(1));
+      expect(loaded.single.name, equals('VOCE SALVATA CORRENTE'));
     });
   });
 }
