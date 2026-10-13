@@ -222,6 +222,32 @@ class OrderItem {
         taxRate: (json['taxRate'] as num?)?.toDouble() ?? 22.0,
         quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
       );
+
+  /// Copia la voce aggiornando i soli campi passati.
+  ///
+  /// `id` e `catalogItemId` sono preservati dalla voce originale: la modifica
+  /// resta locale al documento e non tocca il listino.
+  OrderItem copyWith({
+    String? name,
+    String? description,
+    String? unitOfMeasure,
+    String? discount,
+    double? unitPrice,
+    double? taxRate,
+    double? quantity,
+  }) {
+    return OrderItem(
+      id: id,
+      catalogItemId: catalogItemId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
+      discount: discount ?? this.discount,
+      unitPrice: unitPrice ?? this.unitPrice,
+      taxRate: taxRate ?? this.taxRate,
+      quantity: quantity ?? this.quantity,
+    );
+  }
 }
 
 /// Stati del flusso di un documento (preventivo/ordine).

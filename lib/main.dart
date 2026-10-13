@@ -2855,6 +2855,68 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
     );
   }
 
+  /// Editor della singola voce: modifica Nome e Descrizione della copia
+  /// locale. La voce resta indipendente dal catalogo: nessuna scrittura sul
+  /// listino.
+  void _editItem(int idx) {
+    final item = _items[idx];
+    final nameCtrl = TextEditingController(text: item.name);
+    final descCtrl = TextEditingController(text: item.description);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Modifica Voce'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('order-item-name-field'),
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Nome'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('order-item-description-field'),
+              controller: descCtrl,
+              decoration: const InputDecoration(labelText: 'Descrizione'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+          ElevatedButton(
+            key: const Key('order-item-save'),
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              setState(() {
+                _items[idx] = _items[idx].copyWith(
+                  name: name.isEmpty ? _items[idx].name : name,
+                  description: descCtrl.text.trim(),
+                );
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Salva'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sposta la voce da [from] a [to] mantenendo i riferimenti alle istanze
+  /// (l'ordine è quello serializzato in `WorkOrder.toJson`).
+  void _moveItem(int from, int to) {
+    setState(() {
+      final item = _items.removeAt(from);
+      _items.insert(to, item);
+    });
+  }
+
   // --- Inserimento vocale (AI/STT) ---
 
   /// Pulsante microfono dell'AppBar: ferma la registrazione, oppure fa girare
@@ -3337,83 +3399,134 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: AppTextStyles.labelLg.copyWith(
-                                color: AppColors.onSurface,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              '${formatEuro(item.unitPrice)} + IVA ${item.taxRate.toStringAsFixed(0)}%',
-                              style: AppTextStyles.bodySm.copyWith(
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (item.unitOfMeasure.isNotEmpty ||
-                                item.discount.isNotEmpty)
-                              Text(
-                                [
-                                  if (item.unitOfMeasure.isNotEmpty)
-                                    'UM ${item.unitOfMeasure}',
-                                  if (item.discount.isNotEmpty)
-                                    'Sconto ${item.discount}',
-                                ].join(' · '),
-                                style: AppTextStyles.bodySm.copyWith(
-                                  color: AppColors.onSurfaceVariant,
-                                  fontStyle: FontStyle.italic,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.name,
+                                  style: AppTextStyles.labelLg.copyWith(
+                                    color: AppColors.onSurface,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
+                                if (item.description.isNotEmpty)
+                                  Text(
+                                    item.description,
+                                    style: AppTextStyles.bodySm.copyWith(
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                Text(
+                                  '${formatEuro(item.unitPrice)} + IVA ${item.taxRate.toStringAsFixed(0)}%',
+                                  style: AppTextStyles.bodySm.copyWith(
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (item.unitOfMeasure.isNotEmpty ||
+                                    item.discount.isNotEmpty)
+                                  Text(
+                                    [
+                                      if (item.unitOfMeasure.isNotEmpty)
+                                        'UM ${item.unitOfMeasure}',
+                                      if (item.discount.isNotEmpty)
+                                        'Sconto ${item.discount}',
+                                    ].join(' · '),
+                                    style: AppTextStyles.bodySm.copyWith(
+                                      color: AppColors.onSurfaceVariant,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            key: Key('order-item-edit-$idx'),
+                            tooltip: 'Modifica voce',
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            onPressed: () => _editItem(idx),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: AppColors.error,
+                            ),
+                            onPressed: () =>
+                                setState(() => _items.removeAt(idx)),
+                          ),
+                        ],
                       ),
-                      // Quantity selector
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline, size: 20),
-                        onPressed: () {
-                          if (item.quantity > 1) {
-                            setState(() => item.quantity -= 1);
-                          } else {
-                            setState(() => _items.removeAt(idx));
-                          }
-                        },
-                      ),
-                      Text(
-                        item.quantity.toStringAsFixed(0),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline, size: 20),
-                        onPressed: () => setState(() => item.quantity += 1),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '€ ${item.total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: AppColors.error,
-                        ),
-                        onPressed: () => setState(() => _items.removeAt(idx)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          IconButton(
+                            key: Key('order-item-up-$idx'),
+                            tooltip: 'Sposta su',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                            onPressed:
+                                idx == 0 ? null : () => _moveItem(idx, idx - 1),
+                          ),
+                          IconButton(
+                            key: Key('order-item-down-$idx'),
+                            tooltip: 'Sposta giù',
+                            visualDensity: VisualDensity.compact,
+                            icon:
+                                const Icon(Icons.keyboard_arrow_down, size: 20),
+                            onPressed: idx == _items.length - 1
+                                ? null
+                                : () => _moveItem(idx, idx + 1),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              if (item.quantity > 1) {
+                                setState(() => item.quantity -= 1);
+                              } else {
+                                setState(() => _items.removeAt(idx));
+                              }
+                            },
+                          ),
+                          Text(
+                            item.quantity.toStringAsFixed(0),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon:
+                                const Icon(Icons.add_circle_outline, size: 20),
+                            onPressed: () => setState(() => item.quantity += 1),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '€ ${item.total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -8,6 +8,22 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.9.0] - 2026-10-13
+
+### Added
+
+- **Descrizioni modificabili e riordino delle voci** in preventivi/ordini:
+  - pulsante "matita" su ogni voce apre un dialog con **Nome** e
+    **Descrizione** prefillati; al salvataggio la card mostra subito il nuovo
+    testo e il documento (e il PDF) lo eredita. La voce resta una copia
+    indipendente: il catalogo non viene toccato.
+  - pulsanti **Sposta su/giù** per voce (disabilitati ai bordi) che cambiano
+    l'ordine delle card; l'ordine è quello con cui le voci vengono serializzate
+    in `WorkOrder.toJson` e stampate nel PDF.
+  - `OrderItem.copyWith` preserva `id` e `catalogItemId` e aggiorna i campi
+    passati.
+- La descrizione della voce è ora visibile anche nella card del preventivo.
+
 ## [1.8.3] - 2026-10-13
 
 ### Changed
