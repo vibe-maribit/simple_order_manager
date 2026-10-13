@@ -52,6 +52,7 @@ void main() {
           jsonEncode(clients.map((c) => c.toJson()).toList()),
       'simple_orders_catalog_v1':
           jsonEncode(catalog.map((c) => c.toJson()).toList()),
+      'simple_orders_catalog_version_v1': 2,
     });
   }
 
