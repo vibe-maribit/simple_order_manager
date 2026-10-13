@@ -8,6 +8,12 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.8.3] - 2026-10-13
+
+### Changed
+
+- Sostituito il catalogo con il listino `LISTINO.APP.xls` (1.968 articoli).
+
 ## [1.8.2] - 2026-10-10
 
 ### Changed

@@ -46,6 +46,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'simple_orders_catalog_v1':
           jsonEncode(list.map((c) => c.toJson()).toList()),
+      'simple_orders_catalog_version_v1': 2,
     });
   }
 

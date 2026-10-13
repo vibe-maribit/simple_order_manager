@@ -73,7 +73,7 @@ class CatalogItem {
 
   /// Unità di misura della colonna B del listino (es. `NR`, `KG`, `LT`).
   ///
-  /// Campo informativo ereditato dal catalogo importato in #25; non partecipa
+  /// Campo informativo ereditato dal catalogo importato (LISTINO.APP.xls); non partecipa
   /// ai calcoli. Default `''` per i dati salvati prima dell'introduzione.
   final String unitOfMeasure;
 

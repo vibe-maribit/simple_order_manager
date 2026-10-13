@@ -9,12 +9,12 @@ import 'package:simple_order_manager/main.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Catalogo import (#25): assets/catalog/catalogo.json', () {
-    test('contiene le ~12.351 voci del foglio, una per riga dati', () async {
+  group('Catalogo import: assets/catalog/catalogo.json', () {
+    test('contiene le ~1.968 voci del foglio, una per riga dati', () async {
       final raw = await rootBundle.loadString('assets/catalog/catalogo.json');
       final list = jsonDecode(raw) as List<dynamic>;
 
-      expect(list.length, equals(12351));
+      expect(list.length, equals(1968));
     });
 
     test('ogni voce espone i campi mappati A–F e retro-parsa in CatalogItem',
@@ -59,23 +59,39 @@ void main() {
       final byName = <String, Map<String, dynamic>>{
         for (final e in list) e['name'] as String: e as Map<String, dynamic>,
       };
+      final byId = <String, Map<String, dynamic>>{
+        for (final e in list) e['id'] as String: e as Map<String, dynamic>,
+      };
 
-      final duroglass = byName['MPM DUROGLASS P6/1 RAL 7035 KG17.5'];
+      final duroglass = byId['cat-1'];
       expect(duroglass, isNotNull);
-      expect(duroglass!['id'], equals('cat-1'));
+      expect(duroglass!['name'],
+          equals('DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO'));
       expect(duroglass['unitOfMeasure'], equals('NR'));
       expect(duroglass['currency'], equals('E'));
-      expect(duroglass['unitPrice'], equals(295.85));
+      expect(duroglass['unitPrice'], equals(18.0));
       expect(duroglass['discount'], equals(''));
       expect(duroglass['taxRate'], equals(22.0));
 
-      final sigma = byName['SIGMA PUTZ ENERGY 1.5MM ZN'];
-      expect(sigma, isNotNull);
-      expect(sigma!['unitOfMeasure'], equals('NR'));
-      expect(sigma['currency'], equals('E'));
-      expect(sigma['unitPrice'], equals(78.0));
-      expect(sigma['discount'], equals('35,00'));
-      expect(sigma['taxRate'], equals(22.0));
+      final elekta = byName['ELEKTA TERRA ITALIA 51 100GR'];
+      expect(elekta, isNotNull);
+      expect(elekta!['unitOfMeasure'], equals('22'));
+      expect(elekta['currency'], equals('E'));
+      expect(elekta['unitPrice'], equals(130.0));
+      expect(elekta['discount'], equals('25,00'));
+      expect(elekta['taxRate'], equals(22.0));
+
+      final ppg = byName['PPG POLYSATIN BIANCO LT 12,5 2021'];
+      expect(ppg, isNotNull);
+      expect(ppg!['unitOfMeasure'], equals('NR'));
+      expect(ppg['currency'], equals('E'));
+      expect(ppg['unitPrice'], equals(218.0));
+      expect(ppg['discount'], equals('37,00'));
+      expect(ppg['taxRate'], equals(22.0));
+
+      final cirgel = byName['CIR GEL MANI ML500'];
+      expect(cirgel, isNotNull);
+      expect(cirgel!['taxRate'], equals(22.0));
     });
 
     test('lo sconto multiplo "35,00   10,00" è preservato così com\'è',
@@ -103,16 +119,16 @@ void main() {
     });
   });
 
-  group('Catalogo nel tab UI (#25)', () {
+  group('Catalogo nel tab UI', () {
     // Riga reale del listino (cat-1). Sotto `flutter test` il canale asset
     // non risponde nel fake-async dei widget test, quindi la UI viene coperta
     // seminando lo storage con lo stesso payload JSON prodotto dall'import.
     const CatalogItem duroglass = CatalogItem(
       id: 'cat-1',
-      name: 'MPM DUROGLASS P6/1 RAL 7035 KG17.5',
+      name: 'DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO',
       unitOfMeasure: 'NR',
       currency: 'E',
-      unitPrice: 295.85,
+      unitPrice: 18.0,
       discount: '',
       taxRate: 22.0,
     );
@@ -124,16 +140,17 @@ void main() {
           [
             duroglass.toJson(),
             const CatalogItem(
-              id: 'cat-3',
-              name: 'SIGMA PUTZ ENERGY 1.5MM ZN',
+              id: 'cat-126',
+              name: 'PPG POLYSATIN BIANCO LT 12,5 2021',
               unitOfMeasure: 'NR',
               currency: 'E',
-              unitPrice: 78.0,
-              discount: '35,00',
+              unitPrice: 218.0,
+              discount: '37,00',
               taxRate: 22.0,
             ).toJson(),
           ],
         ),
+        'simple_orders_catalog_version_v1': 2,
       });
     });
 
@@ -154,19 +171,21 @@ void main() {
       // La lista può essere molto lunga: la ricerca isola una voce nota.
       final searchField = find.byKey(const Key('catalog-search-field'));
       expect(searchField, findsOneWidget);
-      await tester.enterText(searchField, 'DUROGLASS');
+      await tester.enterText(searchField, 'DIMA');
       await tester.pumpAndSettle();
 
-      expect(find.text('MPM DUROGLASS P6/1 RAL 7035 KG17.5'), findsOneWidget);
-      expect(find.text('UM NR'), findsOneWidget);
-      expect(find.text('Tot. c/IVA: ${formatEuro(295.85 * 1.22)}'),
+      expect(find.text('DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO'),
           findsOneWidget);
+      expect(find.text('UM NR'), findsOneWidget);
+      expect(
+          find.text('Tot. c/IVA: ${formatEuro(18.0 * 1.22)}'), findsOneWidget);
 
       // Ripulendo la query entrambe le voci riappaiono (nuova ricerca).
       await tester.enterText(searchField, '');
       await tester.pumpAndSettle();
-      expect(find.text('MPM DUROGLASS P6/1 RAL 7035 KG17.5'), findsOneWidget);
-      expect(find.text('SIGMA PUTZ ENERGY 1.5MM ZN'), findsOneWidget);
+      expect(find.text('DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO'),
+          findsOneWidget);
+      expect(find.text('PPG POLYSATIN BIANCO LT 12,5 2021'), findsOneWidget);
     });
 
     testWidgets('l\'editor espone i 6 campi con i valori del listino', (
@@ -185,7 +204,7 @@ void main() {
 
       final duroglassTile = find.widgetWithText(
         ListTile,
-        'MPM DUROGLASS P6/1 RAL 7035 KG17.5',
+        'DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO',
       );
       await tester.tap(
         find.descendant(
@@ -208,11 +227,11 @@ void main() {
 
       expect(
         valueOf('Nome Prodotto/Servizio *'),
-        'MPM DUROGLASS P6/1 RAL 7035 KG17.5',
+        'DIMA TRYPLO OPACO BIANCO 750ML 2026 COLORATO',
       );
       expect(valueOf('Unità di misura'), equals('NR'));
       expect(valueOf('Divisa'), equals('E'));
-      expect(valueOf('Prezzo Unitario (€) *'), equals('295.85'));
+      expect(valueOf('Prezzo Unitario (€) *'), equals('18.00'));
       expect(find.text('22% (IVA Ordinaria)'), findsOneWidget);
 
       await tester.tap(find.text('Annulla'));
@@ -222,7 +241,7 @@ void main() {
         find.descendant(
           of: find.widgetWithText(
             ListTile,
-            'SIGMA PUTZ ENERGY 1.5MM ZN',
+            'PPG POLYSATIN BIANCO LT 12,5 2021',
           ),
           matching: find.byIcon(Icons.edit),
         ),
@@ -234,8 +253,64 @@ void main() {
             .firstWhere((f) => f.decoration?.labelText == 'Sconti')
             .controller!
             .text,
-        equals('35,00'),
+        equals('37,00'),
       );
+    });
+  });
+
+  group('Migrazione catalogo', () {
+    // Una versione dell'asset diversa da quella corrente deve far ricaricare il
+    // listino incluso e riscrivere i dati salvati, così le installazioni già
+    // esistenti ottengono il nuovo catalogo (sostituzione effettiva).
+    test('versione vecchia ricarica dall\'asset e riscrive la versione',
+        () async {
+      const stale = CatalogItem(
+        id: 'cat-9999',
+        name: 'VOCE OBSOLETA DEL VECCHIO LISTINO',
+        unitOfMeasure: 'NR',
+        currency: 'E',
+        unitPrice: 1.0,
+        discount: '',
+        taxRate: 22.0,
+      );
+      SharedPreferences.setMockInitialValues({
+        'simple_orders_catalog_v1': jsonEncode([stale.toJson()]),
+        // Versione precedente (il vecchio listino da 12.351 voci).
+        'simple_orders_catalog_version_v1': 1,
+      });
+
+      final loaded = await StorageService.loadCatalog();
+
+      expect(
+        loaded.any((c) => c.name == 'VOCE OBSOLETA DEL VECCHIO LISTINO'),
+        isFalse,
+        reason: 'il catalogo obsoleto deve essere sostituito dall\'asset',
+      );
+      expect(loaded, isNotEmpty);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('simple_orders_catalog_version_v1'), equals(2));
+    });
+
+    test('versione corrente mantiene il catalogo salvato', () async {
+      const saved = CatalogItem(
+        id: 'cat-7',
+        name: 'VOCE SALVATA CORRENTE',
+        unitOfMeasure: 'NR',
+        currency: 'E',
+        unitPrice: 9.0,
+        discount: '',
+        taxRate: 22.0,
+      );
+      SharedPreferences.setMockInitialValues({
+        'simple_orders_catalog_v1': jsonEncode([saved.toJson()]),
+        'simple_orders_catalog_version_v1': 2,
+      });
+
+      final loaded = await StorageService.loadCatalog();
+
+      expect(loaded.length, equals(1));
+      expect(loaded.single.name, equals('VOCE SALVATA CORRENTE'));
     });
   });
 }

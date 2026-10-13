@@ -37,6 +37,8 @@ void main() async {
 class StorageService {
   static const _keyClients = 'simple_orders_clients_v1';
   static const _keyCatalog = 'simple_orders_catalog_v1';
+  static const _keyCatalogVersion = 'simple_orders_catalog_version_v1';
+  static const int _catalogAssetVersion = 2;
   static const _keyOrders = 'simple_orders_data_v1';
 
   /// Profilo del mittente: JSON con logo (solo path) e contatti.
@@ -69,26 +71,34 @@ class StorageService {
     await prefs.setString(_keyClients, jsonStr);
   }
 
-  /// Percorso del catalogo incluso nell'app: listino della issue #25, usato al
-  /// primo avvio quando `SharedPreferences` è ancora vuoto.
+  /// Percorso del catalogo incluso nell'app: listino LISTINO.APP.xls (Foglio 1),
+  /// usato al primo avvio quando `SharedPreferences` è ancora vuoto.
   static const String _assetCatalog = 'assets/catalog/catalogo.json';
 
   static Future<List<CatalogItem>> loadCatalog() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_keyCatalog);
-    if (raw == null || raw.isEmpty) return _loadCatalogFromAsset();
+    final version = prefs.getInt(_keyCatalogVersion);
+    if (raw == null || raw.isEmpty || version != _catalogAssetVersion) {
+      final items = await _loadCatalogFromAsset();
+      await saveCatalog(items);
+      return items;
+    }
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list
+      final list = (jsonDecode(raw) as List)
           .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
           .toList();
+      return list;
     } catch (_) {
-      return _seedCatalog();
+      final items = _seedCatalog();
+      await saveCatalog(items);
+      return items;
     }
   }
 
-  /// Carica il listino incluso nell'app (12.351 articoli del file allegato a
-  /// #25). Se l'asset manca o è corrotto ripiega sui 3 articoli di esempio.
+  /// Carica il listino incluso nell'app (1.968 articoli del file LISTINO.APP.xls,
+  /// Foglio 1, colonne A–E; divisa fissa E). Se l'asset manca o è corrotto
+  /// ripiega sui 3 articoli di esempio.
   ///
   /// Sotto `flutter test` l'asset non è raggiungibile dalla UI senza
   /// [WidgetTester.runAsync] (il canale `flutter/assets` non risponde nel
@@ -114,6 +124,7 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(items.map((c) => c.toJson()).toList());
     await prefs.setString(_keyCatalog, jsonStr);
+    await prefs.setInt(_keyCatalogVersion, _catalogAssetVersion);
   }
 
   static Future<List<WorkOrder>> loadOrders() async {
