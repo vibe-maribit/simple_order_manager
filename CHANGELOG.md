@@ -8,6 +8,23 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.10.0] - 2026-10-14
+
+### Added
+
+- **Modifica dei prezzi di catalogo con variazioni percentuali e selezione
+  multipla**: dal tab Catalogo si attiva la modalità di selezione
+  (`Icons.checklist`) e si scelgono gli articoli singolarmente, a gruppi
+  arbitrari, tutti i visibili, oppure per **categoria** (tutti gli articoli con
+  lo stesso nome, anche con un long-press sulla card).
+  - Dialog "Variazione %" con campo a segno (aumento/diminuzione), pulsanti
+    rapidi +/−, anteprima del prezzo risultante e conferma "Applica e salva".
+  - L'aggiornamento agisce solo su `unitPrice`, è persistito in un'unica
+    scrittura di `simple_orders_catalog_v1` e non tocca le voci già copiate
+    nei preventivi/ordini.
+  - Funzione pura `applyPriceAdjustment` (arrotondamento ai centesimi, clamp a
+    0) in `models.dart`.
+
 ## [1.9.0] - 2026-10-13
 
 ### Added

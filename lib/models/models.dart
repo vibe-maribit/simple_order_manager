@@ -160,6 +160,20 @@ class CatalogItem {
   }
 }
 
+/// Ricalcola un prezzo applicando una variazione percentuale **con segno**
+/// (positivo = aumento, negativo = diminuzione).
+///
+/// Il risultato è arrotondato ai centesimi e non scende mai sotto [min]
+/// (predefinito `0`), così una diminuzione troppo forte non produce prezzi
+/// negativi. Funzione pura: non dipende dallo stato della UI e viene usata sia
+/// dall'editor di listino sia dai test.
+double applyPriceAdjustment(double unitPrice, double percent,
+    {double min = 0}) {
+  final adjusted = unitPrice * (1 + percent / 100);
+  final rounded = (adjusted * 100).roundToDouble() / 100;
+  return rounded < min ? min : rounded;
+}
+
 class OrderItem {
   final String id;
   final String catalogItemId;
