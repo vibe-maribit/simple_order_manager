@@ -491,6 +491,25 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     _saveCatalog();
   }
 
+  /// Salva in blocco più articoli (es. variazione percentuale dei prezzi).
+  ///
+  /// Sostituisce le voci esistenti per `id` in un unico [setState] e persiste
+  /// il listino una sola volta, a differenza di ripetute chiamate a
+  /// [_addOrUpdateCatalogItem].
+  void _saveCatalogItems(List<CatalogItem> items) {
+    setState(() {
+      for (final item in items) {
+        final index = _catalog.indexWhere((c) => c.id == item.id);
+        if (index >= 0) {
+          _catalog[index] = item;
+        } else {
+          _catalog.add(item);
+        }
+      }
+    });
+    _saveCatalog();
+  }
+
   // --- Order Actions ---
   void _addOrUpdateOrder(WorkOrder order) {
     setState(() {
@@ -571,6 +590,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       CatalogTab(
         catalog: _catalog,
         onSaveItem: _addOrUpdateCatalogItem,
+        onSaveItems: _saveCatalogItems,
         onDeleteItem: _deleteCatalogItem,
       ),
       SettingsTab(
@@ -4251,12 +4271,14 @@ class _ClientsTabState extends State<ClientsTab> {
 class CatalogTab extends StatefulWidget {
   final List<CatalogItem> catalog;
   final ValueChanged<CatalogItem> onSaveItem;
+  final ValueChanged<List<CatalogItem>> onSaveItems;
   final ValueChanged<String> onDeleteItem;
 
   const CatalogTab({
     super.key,
     required this.catalog,
     required this.onSaveItem,
+    required this.onSaveItems,
     required this.onDeleteItem,
   });
 
@@ -4267,6 +4289,16 @@ class CatalogTab extends StatefulWidget {
 class _CatalogTabState extends State<CatalogTab> {
   static const Key kSearchFieldKey = Key('catalog-search-field');
   String _searchQuery = '';
+
+  /// Modalità di selezione multipla per le variazioni di prezzo.
+  bool _selectionMode = false;
+
+  /// Id degli articoli selezionati (indipendente dall'elenco filtrato).
+  final Set<String> _selectedIds = <String>{};
+
+  /// Articoli selezionati, nell'ordine del listino.
+  List<CatalogItem> get _selectedItems =>
+      widget.catalog.where((i) => _selectedIds.contains(i.id)).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -4282,10 +4314,16 @@ class _CatalogTabState extends State<CatalogTab> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Catalogo Articoli & Servizi',
-          style: AppTextStyles.headlineSm,
-        ),
+        title: _selectionMode
+            ? Text(
+                '${_selectedIds.length} selezionati',
+                key: const Key('catalog-selection-count'),
+                style: AppTextStyles.headlineSm,
+              )
+            : const Text(
+                'Catalogo Articoli & Servizi',
+                style: AppTextStyles.headlineSm,
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -4300,13 +4338,48 @@ class _CatalogTabState extends State<CatalogTab> {
             ),
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: 'Info & Versione',
-            onPressed: () => showAppInfoDialog(context),
-          ),
-        ],
+        actions: _selectionMode
+            ? [
+                IconButton(
+                  key: const Key('catalog-select-all'),
+                  icon: const Icon(Icons.select_all),
+                  tooltip: 'Seleziona tutti',
+                  onPressed: filtered.isEmpty
+                      ? null
+                      : () => _selectAllVisible(filtered),
+                ),
+                IconButton(
+                  key: const Key('catalog-group-open'),
+                  icon: const Icon(Icons.category_outlined),
+                  tooltip: 'Seleziona per categoria',
+                  onPressed: _openGroupPicker,
+                ),
+                IconButton(
+                  key: const Key('catalog-clear-selection'),
+                  icon: const Icon(Icons.deselect),
+                  tooltip: 'Deseleziona',
+                  onPressed: _selectedIds.isEmpty ? null : _clearSelection,
+                ),
+                IconButton(
+                  key: const Key('catalog-selection-close'),
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Chiudi selezione',
+                  onPressed: _toggleSelectionMode,
+                ),
+              ]
+            : [
+                IconButton(
+                  key: const Key('catalog-selection-toggle'),
+                  icon: const Icon(Icons.checklist),
+                  tooltip: 'Selezione multipla prezzi',
+                  onPressed: _toggleSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: 'Info & Versione',
+                  onPressed: () => showAppInfoDialog(context),
+                ),
+              ],
       ),
       body: filtered.isEmpty
           ? Center(
@@ -4337,20 +4410,38 @@ class _CatalogTabState extends State<CatalogTab> {
               itemBuilder: (ctx, i) {
                 final item = filtered[i];
                 final grossPrice = item.unitPrice * (1 + item.taxRate / 100);
+                final selected = _selectedIds.contains(item.id);
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
+                  color: _selectionMode && selected
+                      ? AppColors.secondaryContainer.withValues(alpha: 0.5)
+                      : null,
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
-                    leading: CircleAvatar(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.secondaryContainer,
-                      child: Icon(
-                        Icons.label,
-                        color:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
-                      ),
-                    ),
+                    selected: _selectionMode && selected,
+                    onTap: _selectionMode ? () => _toggleItem(item.id) : null,
+                    onLongPress: () {
+                      setState(() => _selectionMode = true);
+                      _selectGroup(item.name);
+                    },
+                    leading: _selectionMode
+                        ? Checkbox(
+                            key: Key('catalog-item-checkbox-${item.id}'),
+                            value: selected,
+                            onChanged: (_) => _toggleItem(item.id),
+                          )
+                        : CircleAvatar(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .secondaryContainer,
+                            child: Icon(
+                              Icons.label,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondaryContainer,
+                            ),
+                          ),
                     title: Text(
                       item.name,
                       style: AppTextStyles.headlineSm.copyWith(
@@ -4477,10 +4568,233 @@ class _CatalogTabState extends State<CatalogTab> {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openItemEditor(null),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuovo Articolo'),
+      floatingActionButton: _selectionMode
+          ? FloatingActionButton.extended(
+              key: const Key('catalog-bulk-apply'),
+              onPressed:
+                  _selectedIds.isEmpty ? null : _openPriceAdjustmentDialog,
+              icon: const Icon(Icons.percent),
+              label: const Text('Variazione %'),
+            )
+          : FloatingActionButton.extended(
+              onPressed: () => _openItemEditor(null),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuovo Articolo'),
+            ),
+    );
+  }
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleItem(String id) {
+    setState(() {
+      if (!_selectedIds.remove(id)) _selectedIds.add(id);
+    });
+  }
+
+  void _clearSelection() {
+    setState(_selectedIds.clear);
+  }
+
+  /// Seleziona tutte le voci attualmente visibili (elenco filtrato).
+  void _selectAllVisible(List<CatalogItem> filtered) {
+    setState(() => _selectedIds.addAll(filtered.map((i) => i.id)));
+  }
+
+  /// Seleziona tutti gli articoli del listino che condividono [name]
+  /// (confronto case-insensitive con `trim`): la "categoria" richiesta.
+  void _selectGroup(String name) {
+    final normalized = name.trim().toLowerCase();
+    setState(() {
+      _selectedIds.addAll(
+        widget.catalog
+            .where((i) => i.name.trim().toLowerCase() == normalized)
+            .map((i) => i.id),
+      );
+    });
+  }
+
+  void _openGroupPicker() {
+    final counts = <String, int>{};
+    for (final item in widget.catalog) {
+      final name = item.name.trim();
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final names = counts.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('catalog-group-picker'),
+        title: const Text('Seleziona per categoria'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: names.length,
+            itemBuilder: (context, i) {
+              final name = names[i];
+              return ListTile(
+                key: Key('catalog-group-option-$i'),
+                title: Text(
+                  name.isEmpty ? '(senza nome)' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Text('${counts[name]}'),
+                onTap: () {
+                  _selectGroup(name);
+                  Navigator.pop(ctx);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openPriceAdjustmentDialog() async {
+    if (_selectedIds.isEmpty) return;
+    final selected = _selectedItems;
+    final controller = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final percent = _parsePercent(controller.text);
+          final preview = selected.first;
+          final newPrice = applyPriceAdjustment(preview.unitPrice, percent);
+          return AlertDialog(
+            title: const Text('Variazione percentuale prezzi'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${selected.length} articoli selezionati'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const Key('catalog-percent-field'),
+                          controller: controller,
+                          autofocus: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Variazione %',
+                            hintText: 'es. 10 oppure -5',
+                            suffixText: '%',
+                          ),
+                          onChanged: (_) => setDlgState(() {}),
+                        ),
+                      ),
+                      IconButton(
+                        key: const Key('catalog-percent-decrease'),
+                        tooltip: 'Diminuzione',
+                        icon: const Icon(Icons.remove),
+                        onPressed: () {
+                          controller.text = _signedPercent(controller.text, -1);
+                          setDlgState(() {});
+                        },
+                      ),
+                      IconButton(
+                        key: const Key('catalog-percent-increase'),
+                        tooltip: 'Aumento',
+                        icon: const Icon(Icons.add),
+                        onPressed: () {
+                          controller.text = _signedPercent(controller.text, 1);
+                          setDlgState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Esempio: ${formatEuro(preview.unitPrice)} → '
+                    '${formatEuro(newPrice)}',
+                    key: const Key('catalog-percent-preview'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                key: const Key('catalog-percent-confirm'),
+                onPressed: percent == 0
+                    ? null
+                    : () {
+                        Navigator.pop(ctx);
+                        _applyAdjustment(percent);
+                      },
+                child: const Text('Applica e salva'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Interpreta il testo del campo percentuale accettando sia la virgola sia
+  /// il punto come separatore decimale; `0` per input vuoto o non numerico.
+  double _parsePercent(String text) =>
+      double.tryParse(text.trim().replaceAll(',', '.')) ?? 0;
+
+  /// Riscrive il campo applicando il segno richiesto (`1` aumento, `-1`
+  /// diminuzione), mantenendo il valore assoluto inserito.
+  String _signedPercent(String text, int sign) {
+    final value = _parsePercent(text).abs();
+    if (value == 0) return sign >= 0 ? '10' : '-10';
+    return sign >= 0 ? value.toString() : '-$value';
+  }
+
+  /// Applica la variazione [percent] agli articoli selezionati, persiste il
+  /// listino in un'unica chiamata e chiude la modalità di selezione.
+  void _applyAdjustment(double percent) {
+    final updated = <CatalogItem>[
+      for (final item in widget.catalog)
+        if (_selectedIds.contains(item.id))
+          item.copyWith(
+            unitPrice: applyPriceAdjustment(item.unitPrice, percent),
+          )
+        else
+          item,
+    ];
+    final count = _selectedIds.length;
+    widget.onSaveItems(updated);
+    setState(() {
+      _selectedIds.clear();
+      _selectionMode = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const Key('catalog-adjust-snackbar'),
+        content: Text(
+          'Variazione ${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(2)}% '
+          'applicata a $count articoli',
+        ),
       ),
     );
   }
