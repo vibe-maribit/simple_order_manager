@@ -8,6 +8,16 @@ versioning segue [Semantic Versioning](https://semver.org/lang-it/) (`MAJOR.MINO
 `pubspec.yaml` è la fonte di verità della versione: i valori `MAJOR.MINOR.PATCH+N`
 (versione + build number) dichiarati qui devono coincidere con `version:` in `pubspec.yaml`.
 
+## [1.11.0] - 2026-10-16
+
+### Changed
+
+- **Card del catalogo multi-riga, descrizione leggibile per intero**: nel tab
+  Catalogo il nome prodotto non è più troncato con ellipsis a una sola riga e
+  la descrizione va a capo senza limiti; la card cresce in altezza in base al
+  contenuto e la riga dei metadati (IVA, UM, totale) si adatta alla larghezza
+  disponibile senza overflow.
+
 ## [1.10.0] - 2026-10-14
 
 ### Added

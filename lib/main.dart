@@ -3701,18 +3701,25 @@ class _OrderEditScreenState extends State<OrderEditScreen> {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold),
                               ),
-                              subtitle: Text(
-                                [
-                                  '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
-                                  if (cat.unitOfMeasure.isNotEmpty)
-                                    'UM ${cat.unitOfMeasure}',
-                                  if (cat.discount.isNotEmpty)
-                                    'Sconto ${cat.discount}',
-                                  if (cat.description.isNotEmpty)
-                                    cat.description,
-                                ].join(' · '),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    [
+                                      '${formatEuro(cat.unitPrice)} (IVA ${cat.taxRate.toStringAsFixed(0)}%)',
+                                      if (cat.unitOfMeasure.isNotEmpty)
+                                        'UM ${cat.unitOfMeasure}',
+                                      if (cat.discount.isNotEmpty)
+                                        'Sconto ${cat.discount}',
+                                    ].join(' · '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (cat.description.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(cat.description),
+                                  ],
+                                ],
                               ),
                               trailing: ElevatedButton(
                                 key: const Key('catalog-picker-select'),
@@ -4447,8 +4454,6 @@ class _CatalogTabState extends State<CatalogTab> {
                       style: AppTextStyles.headlineSm.copyWith(
                         color: AppColors.onSurface,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4463,7 +4468,10 @@ class _CatalogTabState extends State<CatalogTab> {
                           ),
                         ],
                         const SizedBox(height: 6),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -4485,8 +4493,7 @@ class _CatalogTabState extends State<CatalogTab> {
                                 ),
                               ),
                             ),
-                            if (item.unitOfMeasure.isNotEmpty) ...[
-                              const SizedBox(width: 8),
+                            if (item.unitOfMeasure.isNotEmpty)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 6,
@@ -4507,8 +4514,6 @@ class _CatalogTabState extends State<CatalogTab> {
                                   ),
                                 ),
                               ),
-                            ],
-                            const SizedBox(width: 8),
                             Text(
                               'Tot. c/IVA: ${formatEuro(grossPrice)}',
                               style: const TextStyle(
